@@ -15,7 +15,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           Contraseña
           <input className="input" type="password" name="password" autoComplete="current-password" required autoFocus />
         </label>
-        {error && <p className="error" role="alert">Contraseña incorrecta.</p>}
+        {error === "config" && (
+          <p className="error" role="alert">
+            Falta configurar la contraseña: añade APP_PASSWORD en Vercel y vuelve a desplegar.
+          </p>
+        )}
+        {error && error !== "config" && <p className="error" role="alert">Contraseña incorrecta.</p>}
         <button className="btn-primary" type="submit">Entrar</button>
       </form>
     </main>
