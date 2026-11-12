@@ -3,11 +3,14 @@ import { AUTH_COOKIE, tokenFor } from "@/lib/auth";
 
 export async function POST(req: Request) {
   const form = await req.formData();
-  const given = String(form.get("password") ?? "");
-  const password = process.env.APP_PASSWORD;
+  const given = String(form.get("password") ?? "").trim();
+  const password = process.env.APP_PASSWORD?.trim();
   const base = new URL(req.url);
 
-  if (!password || given !== password) {
+  if (!password) {
+    return NextResponse.redirect(new URL("/login?error=config", base), 303);
+  }
+  if (given !== password) {
     return NextResponse.redirect(new URL("/login?error=1", base), 303);
   }
 

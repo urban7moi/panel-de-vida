@@ -4,7 +4,7 @@ import { AUTH_COOKIE, tokenFor } from "./auth";
 
 /** Comprueba en el servidor que has entrado con la contraseña. Si no, manda al login. */
 export async function requireAuth() {
-  const password = process.env.APP_PASSWORD;
+  const password = process.env.APP_PASSWORD?.trim();
   if (!password) {
     // En local (npm run dev) la app queda abierta; publicada, nunca.
     if (process.env.NODE_ENV !== "production") return;

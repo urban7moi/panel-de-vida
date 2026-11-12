@@ -13,7 +13,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </div>
         <label className="field">
           Contraseña
-          <input className="input" type="password" name="password" autoComplete="current-password" required autoFocus />
+          <input className="input" type="password" name="password" autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} required autoFocus />
         </label>
         {error === "config" && (
           <p className="error" role="alert">
