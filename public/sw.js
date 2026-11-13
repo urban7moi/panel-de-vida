@@ -1,5 +1,5 @@
 // Service worker mínimo: guarda los archivos estáticos para que la app abra rápido.
-const CACHE = "panel-v1";
+const CACHE = "panel-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
