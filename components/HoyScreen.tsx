@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CheckIcon, SunIcon } from "./icons";
-import { mails } from "@/lib/mock";
 import { useStored } from "@/lib/useStored";
 
 type Task = {
@@ -12,6 +11,9 @@ type Task = {
   stars: number; // 1-5
   done: boolean;
 };
+
+type Mail = { id: string; from: string; initials: string; subject: string; preview: string; time: string; important: boolean; unread: boolean };
+type MailState = { status: "cargando" | "ok" | "error" | "sin-configurar"; mails: Mail[]; error?: string };
 
 type AgendaItem =
   | { kind: "workout"; time: string; title: string; detail: string }
@@ -100,9 +102,17 @@ export default function HoyScreen() {
     ...sorted.map((task) => ({ kind: "task" as const, time: task.time, task })),
   ].sort((a, b) => (a.time && b.time ? a.time.localeCompare(b.time) : a.time ? -1 : b.time ? 1 : 0));
 
-  // --- Emails (aún de ejemplo) ---
+  // --- Emails ---
+  const [mail, setMail] = useState<MailState>({ status: "cargando", mails: [] });
+  useEffect(() => {
+    fetch("/api/mail")
+      .then((r) => r.json())
+      .then((j) => setMail({ status: j.status ?? "error", mails: j.mails ?? [], error: j.error }))
+      .catch(() => setMail({ status: "error", mails: [], error: "No se pudo conectar con tu correo." }));
+  }, []);
   const [mailTab, setMailTab] = useState<"imp" | "all">("imp");
-  const visibleMails = mailTab === "imp" ? mails.filter((m) => m.important) : mails;
+  const importantMails = mail.mails.filter((m) => m.important);
+  const visibleMails = mailTab === "imp" ? importantMails : mail.mails;
 
   // --- Resumen ---
   const isToday = activeDay === today;
@@ -140,6 +150,9 @@ export default function HoyScreen() {
               {important > 0 && <>, {important} muy {important === 1 ? "importante" : "importantes"}</>}.
               {nextTask && <> La próxima: {nextTask.title} a las {nextTask.time}.</>}
             </>
+          )}
+          {isToday && mail.status === "ok" && importantMails.length > 0 && (
+            <> Tienes <strong>{importantMails.length} {importantMails.length === 1 ? "email importante" : "emails importantes"}</strong>.</>
           )}
         </p>
         <div className="tiles">
@@ -261,27 +274,48 @@ export default function HoyScreen() {
       <section className="section" aria-labelledby="h-mail">
         <div className="section-head">
           <h2 id="h-mail" className="section-title">Emails</h2>
-          <span className="small muted">Ejemplo</span>
+          {mail.status === "ok" && <span className="small muted">Últimos 3 días</span>}
         </div>
-        <div className="segmented" role="tablist" aria-label="Filtrar emails">
-          <button role="tab" aria-selected={mailTab === "imp"} onClick={() => setMailTab("imp")}>Importantes</button>
-          <button role="tab" aria-selected={mailTab === "all"} onClick={() => setMailTab("all")}>Todos</button>
-        </div>
-        <div className="list">
-          {visibleMails.map((m) => (
-            <div className="row mail" key={m.id}>
-              <span className="avatar" aria-hidden="true">{m.initials}</span>
-              <div className="grow" style={{ gap: 2 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                  <span className="ellipsis" style={{ fontSize: 15, fontWeight: 600 }}>{m.from}</span>
-                  <span className="tiny muted" style={{ flexShrink: 0 }}>{m.time}</span>
-                </div>
-                <span className="ellipsis" style={{ fontSize: 14, fontWeight: 500 }}>{m.subject}</span>
-                <span className="ellipsis small muted">{m.preview}</span>
-              </div>
+        {mail.status === "sin-configurar" ? (
+          <div className="card">
+            <p className="small muted" style={{ margin: 0, lineHeight: 1.5 }}>
+              Añade EMAIL_USER y EMAIL_APP_PASSWORD en Vercel y vuelve a desplegar para ver tu correo.
+            </p>
+          </div>
+        ) : mail.status === "error" ? (
+          <div className="card"><p className="error" role="alert" style={{ margin: 0 }}>{mail.error}</p></div>
+        ) : mail.status === "cargando" ? (
+          <div className="skeleton" style={{ height: 220 }} />
+        ) : (
+          <>
+            <div className="segmented" role="tablist" aria-label="Filtrar emails">
+              <button role="tab" aria-selected={mailTab === "imp"} onClick={() => setMailTab("imp")}>Importantes · {importantMails.length}</button>
+              <button role="tab" aria-selected={mailTab === "all"} onClick={() => setMailTab("all")}>Todos · {mail.mails.length}</button>
             </div>
-          ))}
-        </div>
+            {visibleMails.length === 0 ? (
+              <div className="card"><span className="small muted">{mailTab === "imp" ? "Nada importante en los últimos 3 días." : "Bandeja vacía en los últimos 3 días."}</span></div>
+            ) : (
+              <div className="list">
+                {visibleMails.map((m) => (
+                  <div className="row mail" key={m.id}>
+                    <span className="avatar" aria-hidden="true">{m.initials}</span>
+                    <div className="grow" style={{ gap: 2 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                        <span className="ellipsis" style={{ fontSize: 15, fontWeight: m.unread ? 700 : 500 }}>
+                          {m.unread && <i className="dot" style={{ background: "var(--accent)", marginRight: 6, verticalAlign: "middle" }} />}
+                          {m.from}
+                        </span>
+                        <span className="tiny muted" style={{ flexShrink: 0 }}>{m.time}</span>
+                      </div>
+                      <span className="ellipsis" style={{ fontSize: 14, fontWeight: m.unread ? 600 : 500 }}>{m.subject}</span>
+                      {m.preview && <span className="ellipsis small muted">{m.preview}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </section>
 
       {/* Hoja para añadir tarea */}
