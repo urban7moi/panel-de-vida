@@ -1,28 +1,52 @@
-// Service worker mínimo: guarda los archivos estáticos para que la app abra rápido.
-const CACHE = "panel-v3";
+// Service worker: la app abre al instante y aguanta sin cobertura.
+// - Archivos estáticos (JS, CSS, iconos, fuentes): de la caché y, si no están, de la red.
+// - Pantallas: siempre de la red; si no hay conexión, la última versión guardada.
+const CACHE = "panel-v4";
+const PAGES = "panel-pages-v1";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== PAGES).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
   );
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
-  const url = new URL(event.request.url);
-  if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
-  const isStatic = url.pathname.startsWith("/_next/static/") || /\.(png|ico|webmanifest)$/.test(url.pathname);
-  if (!isStatic) return;
-  event.respondWith(
-    caches.match(event.request).then(
-      (hit) =>
-        hit ||
-        fetch(event.request).then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(event.request, copy));
+  const req = event.request;
+  const url = new URL(req.url);
+  if (req.method !== "GET" || url.origin !== self.location.origin) return;
+
+  if (req.mode === "navigate" && !url.pathname.startsWith("/api/")) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res.ok && !res.redirected) {
+            const copy = res.clone();
+            caches.open(PAGES).then((c) => c.put(url.pathname, copy));
+          }
           return res;
         })
-    )
+        .catch(() => caches.match(url.pathname, { cacheName: PAGES }).then((hit) => hit || caches.match("/", { cacheName: PAGES }))),
+    );
+    return;
+  }
+
+  const isStatic = url.pathname.startsWith("/_next/static/") || /\.(png|ico|webmanifest|woff2)$/.test(url.pathname);
+  if (!isStatic) return;
+  event.respondWith(
+    caches.match(req).then(
+      (hit) =>
+        hit ||
+        fetch(req).then((res) => {
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(req, copy));
+          }
+          return res;
+        }),
+    ),
   );
 });

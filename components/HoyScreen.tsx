@@ -105,10 +105,30 @@ export default function HoyScreen() {
   // --- Emails ---
   const [mail, setMail] = useState<MailState>({ status: "cargando", mails: [] });
   useEffect(() => {
+    // Enseña al momento los últimos emails guardados y los actualiza por detrás.
+    let hadCache = false;
+    try {
+      const cached = localStorage.getItem("mail-cache");
+      if (cached) {
+        setMail(JSON.parse(cached));
+        hadCache = true;
+      }
+    } catch {
+      /* sin caché */
+    }
     fetch("/api/mail")
       .then((r) => r.json())
-      .then((j) => setMail({ status: j.status ?? "error", mails: j.mails ?? [], unreadTotal: j.unreadTotal ?? 0, error: j.error }))
-      .catch(() => setMail({ status: "error", mails: [], error: "No se pudo conectar con tu correo." }));
+      .then((j) => {
+        const next: MailState = { status: j.status ?? "error", mails: j.mails ?? [], unreadTotal: j.unreadTotal ?? 0, error: j.error };
+        if (next.status === "error" && hadCache) return; // mejor lo último bueno que un error pasajero
+        setMail(next);
+        try {
+          if (next.status === "ok") localStorage.setItem("mail-cache", JSON.stringify(next));
+        } catch {
+          /* sin espacio */
+        }
+      })
+      .catch(() => !hadCache && setMail({ status: "error", mails: [], error: "No se pudo conectar con tu correo." }));
   }, []);
   const unread = mail.unreadTotal ?? 0;
 
