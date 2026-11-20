@@ -9,7 +9,7 @@ export async function GET() {
   if (!(await isLoggedIn())) return NextResponse.json({ error: "Inicia sesión de nuevo." }, { status: 401 });
   if (!mailConfigured()) return NextResponse.json({ status: "sin-configurar", mails: [] });
   try {
-    const { mails, unreadTotal } = await recentMail(3);
+    const { mails, unreadTotal } = await recentMail();
     return NextResponse.json(
       { status: "ok", mails, unreadTotal },
       { headers: { "cache-control": "private, max-age=60" } },

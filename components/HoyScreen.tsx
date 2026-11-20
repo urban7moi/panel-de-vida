@@ -12,7 +12,7 @@ type Task = {
   done: boolean;
 };
 
-type Mail = { id: string; from: string; initials: string; subject: string; preview: string; time: string; important: boolean; unread: boolean };
+type Mail = { id: string; from: string; initials: string; subject: string; preview: string; time: string; day: "hoy" | "ayer"; unread: boolean };
 type MailState = { status: "cargando" | "ok" | "error" | "sin-configurar"; mails: Mail[]; unreadTotal?: number; error?: string };
 
 type AgendaItem =
@@ -108,7 +108,7 @@ export default function HoyScreen() {
     // Enseña al momento los últimos emails guardados y los actualiza por detrás.
     let hadCache = false;
     try {
-      const cached = localStorage.getItem("mail-cache");
+      const cached = localStorage.getItem("mail-cache-v2");
       if (cached) {
         setMail(JSON.parse(cached));
         hadCache = true;
@@ -123,7 +123,7 @@ export default function HoyScreen() {
         if (next.status === "error" && hadCache) return; // mejor lo último bueno que un error pasajero
         setMail(next);
         try {
-          if (next.status === "ok") localStorage.setItem("mail-cache", JSON.stringify(next));
+          if (next.status === "ok") localStorage.setItem("mail-cache-v2", JSON.stringify(next));
         } catch {
           /* sin espacio */
         }
@@ -291,7 +291,7 @@ export default function HoyScreen() {
       {/* Emails */}
       <section className="section" aria-labelledby="h-mail">
         <div className="section-head">
-          <h2 id="h-mail" className="section-title">Emails</h2>
+          <h2 id="h-mail" className="section-title">Emails · Principal</h2>
           {mail.status === "ok" && <span className="small muted">{unread > 0 ? `${unread} sin leer` : "Todo leído"}</span>}
         </div>
         {mail.status === "sin-configurar" ? (
@@ -306,24 +306,33 @@ export default function HoyScreen() {
           <div className="skeleton" style={{ height: 220 }} />
         ) : (
           mail.mails.length === 0 ? (
-            <div className="card"><span className="small muted">Bandeja de entrada vacía.</span></div>
+            <div className="card"><span className="small muted">Ningún email en Principal ni hoy ni ayer.</span></div>
           ) : (
-            <div className="list">
-              {mail.mails.map((m) => (
-                <div className="row mail" key={m.id}>
-                  <span className="avatar" aria-hidden="true">{m.initials}</span>
-                  <div className="grow" style={{ gap: 2 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                      <span className="ellipsis" style={{ fontSize: 15, fontWeight: m.unread ? 700 : 500 }}>{m.from}</span>
-                      <span className="tiny muted" style={{ flexShrink: 0 }}>{m.time}</span>
-                    </div>
-                    <span className="ellipsis" style={{ fontSize: 14, fontWeight: m.unread ? 600 : 400 }}>{m.subject}</span>
-                    {m.preview && <span className="ellipsis small muted">{m.preview}</span>}
-                    {m.unread && <span className="chip" style={{ marginTop: 4 }}>No leído</span>}
+            (["hoy", "ayer"] as const).map((day) => {
+              const list = mail.mails.filter((m) => m.day === day);
+              if (list.length === 0) return null;
+              return (
+                <div key={day} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <span className="label-caps" style={{ paddingLeft: 4 }}>{day === "hoy" ? "Hoy" : "Ayer"}</span>
+                  <div className="list">
+                    {list.map((m) => (
+                      <div className="row mail" key={m.id}>
+                        <span className="avatar" aria-hidden="true">{m.initials}</span>
+                        <div className="grow" style={{ gap: 2 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                            <span className="ellipsis" style={{ fontSize: 15, fontWeight: m.unread ? 700 : 500 }}>{m.from}</span>
+                            <span className="tiny muted" style={{ flexShrink: 0 }}>{m.time}</span>
+                          </div>
+                          <span className="ellipsis" style={{ fontSize: 14, fontWeight: m.unread ? 600 : 400 }}>{m.subject}</span>
+                          {m.preview && <span className="ellipsis small muted">{m.preview}</span>}
+                          {m.unread && <span className="chip" style={{ marginTop: 4 }}>No leído</span>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })
           )
         )}
       </section>

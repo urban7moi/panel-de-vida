@@ -1,7 +1,7 @@
 // Lee tus emails recientes por IMAP con una contraseña de aplicación (solo lectura).
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
-import { TZ } from "./time";
+import { madridToISO, TZ } from "./time";
 
 export type Mail = {
   id: string;
@@ -9,7 +9,8 @@ export type Mail = {
   initials: string;
   subject: string;
   preview: string;
-  time: string; // "08:41", "Ayer" o "18 nov"
+  time: string; // "08:41"
+  day: "hoy" | "ayer";
   important: boolean;
   unread: boolean;
 };
@@ -34,15 +35,7 @@ function imapHost(user: string) {
   return "imap.gmail.com";
 }
 
-function when(date: Date) {
-  const key = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(d);
-  const today = key(new Date());
-  const yesterday = key(new Date(Date.now() - 864e5));
-  if (key(date) === today)
-    return new Intl.DateTimeFormat("es-ES", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
-  if (key(date) === yesterday) return "Ayer";
-  return date.toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: TZ });
-}
+const dayKey = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(d);
 
 function initialsOf(name: string) {
   return (
@@ -56,8 +49,11 @@ function initialsOf(name: string) {
   );
 }
 
-/** Los últimos `count` emails de la bandeja de entrada y cuántos hay sin leer en total. */
-export async function recentMail(count = 3): Promise<{ mails: Mail[]; unreadTotal: number }> {
+/**
+ * Emails de hoy y de ayer de la bandeja "Principal" de Gmail (sin Promociones,
+ * Social, Notificaciones ni Foros), del más nuevo al más antiguo.
+ */
+export async function recentMail(max = 40): Promise<{ mails: Mail[]; unreadTotal: number }> {
   const cred = credentials();
   if (!cred) throw new Error("sin-configurar");
   const client = new ImapFlow({
@@ -68,52 +64,62 @@ export async function recentMail(count = 3): Promise<{ mails: Mail[]; unreadTota
     logger: false,
     connectionTimeout: 10_000,
   });
+
+  // Desde las 00:00 de ayer (hora de Madrid).
+  const yesterdayKey = new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date(Date.now() - 864e5));
+  const from = new Date(madridToISO(`${yesterdayKey}T00:00:00`)).getTime();
+
   await client.connect();
   const out: (Mail & { ts: number })[] = [];
-  let unreadTotal = 0;
   try {
     const lock = await client.getMailboxLock("INBOX", { readOnly: true });
     try {
-      const exists = client.mailbox ? client.mailbox.exists : 0;
-      if (!exists) return { mails: [], unreadTotal: 0 };
-      const unseen = (await client.search({ seen: false }, { uid: true })) || [];
-      unreadTotal = unseen.length;
-      // Los últimos mensajes por número de secuencia (los que entraron más tarde).
-      const range = `${Math.max(1, exists - count + 1)}:*`;
       const gmail = client.capabilities.has("X-GM-EXT-1");
-      const msgs = await client.fetchAll(range, {
-        uid: true,
-        envelope: true,
-        flags: true,
-        internalDate: true,
-        labels: gmail,
-        source: { maxLength: 16_000 },
-      });
-      for (const m of msgs) {
-        const from = m.envelope?.from?.[0];
-        const name = from?.name || from?.address || "Desconocido";
-        let preview = "";
-        if (m.source) {
-          try {
-            const parsed = await simpleParser(m.source);
-            preview = (parsed.text ?? "").replace(/\s+/g, " ").trim().slice(0, 140);
-          } catch {
-            /* vista previa opcional */
+      // SINCE va por fechas del servidor: pedimos un día de margen y filtramos por hora después.
+      const since = new Date(from - 864e5);
+      let found: number[] | false | undefined;
+      try {
+        found = await client.search(gmail ? { gmraw: "category:primary", since } : { since }, { uid: true });
+      } catch {
+        found = false;
+      }
+      // Si el servidor no admite el filtro de Gmail (devuelve false), toda la bandeja de entrada.
+      if (found === false) found = await client.search({ since }, { uid: true });
+      const uids = (found || []).slice(-max);
+      if (uids.length > 0) {
+        const msgs = await client.fetchAll(
+          uids,
+          { uid: true, envelope: true, flags: true, internalDate: true, source: { maxLength: 8_000 } },
+          { uid: true },
+        );
+        for (const m of msgs) {
+          const date = new Date(m.internalDate ?? m.envelope?.date ?? Date.now());
+          if (date.getTime() < from) continue;
+          const sender = m.envelope?.from?.[0];
+          const name = sender?.name || sender?.address || "Desconocido";
+          let preview = "";
+          if (m.source) {
+            try {
+              const parsed = await simpleParser(m.source);
+              preview = (parsed.text ?? "").replace(/\s+/g, " ").trim().slice(0, 140);
+            } catch {
+              /* vista previa opcional */
+            }
           }
+          const flags = m.flags ? [...m.flags] : [];
+          out.push({
+            ts: date.getTime(),
+            id: String(m.uid),
+            from: name,
+            initials: initialsOf(name),
+            subject: m.envelope?.subject || "(Sin asunto)",
+            preview,
+            time: new Intl.DateTimeFormat("es-ES", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(date),
+            day: dayKey(date) === dayKey(new Date()) ? "hoy" : "ayer",
+            important: false,
+            unread: !flags.includes("\\Seen"),
+          });
         }
-        const labels = m.labels ? [...m.labels] : [];
-        const flags = m.flags ? [...m.flags] : [];
-        out.push({
-          ts: new Date(m.internalDate ?? m.envelope?.date ?? Date.now()).getTime(),
-          id: String(m.uid),
-          from: name,
-          initials: initialsOf(name),
-          subject: m.envelope?.subject || "(Sin asunto)",
-          preview,
-          time: when(new Date(m.internalDate ?? m.envelope?.date ?? Date.now())),
-          important: gmail ? labels.includes("\\Important") : flags.includes("\\Flagged") || !flags.includes("\\Seen"),
-          unread: !flags.includes("\\Seen"),
-        });
       }
     } finally {
       lock.release();
@@ -121,10 +127,8 @@ export async function recentMail(count = 3): Promise<{ mails: Mail[]; unreadTota
   } finally {
     await client.logout().catch(() => {});
   }
-  // Más recientes primero.
   const mails = out
     .sort((a, b) => b.ts - a.ts)
-    .slice(0, count)
     .map((m) => ({ ...m, ts: undefined })) as Mail[];
-  return { mails, unreadTotal };
+  return { mails, unreadTotal: mails.filter((m) => m.unread).length };
 }
