@@ -1,13 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { BalanceIcon, CheckIcon, FlatIcon, InfoIcon, PlayIcon } from "./icons";
+import { useRef, useState } from "react";
+import { BalanceIcon, CameraIcon, CheckIcon, FlatIcon, InfoIcon, PlayIcon } from "./icons";
 import { coachTips, firstWeek, lifts, macroGoals, weeklyVolume, workout } from "@/lib/mock";
 import { useStored } from "@/lib/useStored";
+import { shrinkImage } from "@/lib/image";
 
-type Meal = { name: string; p: number; c: number; g: number };
+type Meal = { name: string; p: number; c: number; g: number; kcal?: number };
+type Estimate = { name: string; kcal: number; p: number; c: number; g: number; confidence: string; notes: string };
 
 const kcalOf = (p: number, c: number, g: number) => p * 4 + c * 4 + g * 9;
+const mealKcal = (m: Meal) => m.kcal ?? kcalOf(m.p, m.c, m.g);
+const emptyForm = { name: "", kcal: "", p: "", c: "", g: "" };
 const fmt = (n: number) => n.toLocaleString("es-ES", { useGrouping: "always" } as Intl.NumberFormatOptions);
 const toNum = (v: string) => {
   const n = parseFloat(v.replace(",", "."));
@@ -22,16 +26,41 @@ function todayKey() {
 export default function EntrenoScreen() {
   const goals = macroGoals.training;
   const [meals, setMeals] = useStored<Meal[]>(`comidas-${todayKey()}`, []);
-  const [form, setForm] = useState({ name: "", p: "", c: "", g: "" });
+  const [form, setForm] = useState(emptyForm);
+  const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const eaten = meals.reduce(
     (a, m) => ({ p: a.p + m.p, c: a.c + m.c, g: a.g + m.g }),
     { p: 0, c: 0, g: 0 },
   );
   const kGoal = kcalOf(goals.p, goals.c, goals.g);
-  const kEaten = kcalOf(eaten.p, eaten.c, eaten.g);
+  const kEaten = meals.reduce((a, m) => a + mealKcal(m), 0);
   const kPct = Math.min(100, Math.round((kEaten / kGoal) * 100));
-  const formKcal = kcalOf(toNum(form.p), toNum(form.c), toNum(form.g));
+  const formKcal = form.kcal.trim() ? toNum(form.kcal) : kcalOf(toNum(form.p), toNum(form.c), toNum(form.g));
+
+  async function analyzePhoto(file: File) {
+    setAnalyzing(true);
+    setPhotoError("");
+    setEstimate(null);
+    try {
+      const body = new FormData();
+      body.append("image", await shrinkImage(file), "comida.jpg");
+      const res = await fetch("/api/meal", { method: "POST", body });
+      const json = await res.json().catch(() => ({ error: "Respuesta no válida del servidor." }));
+      if (!res.ok) throw new Error(json.error ?? "No se pudo analizar la foto.");
+      const est = json as Estimate;
+      setEstimate(est);
+      setForm({ name: est.name, kcal: String(est.kcal), p: String(est.p), c: String(est.c), g: String(est.g) });
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "No se pudo analizar la foto.");
+    } finally {
+      setAnalyzing(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
 
   const macroRows = [
     { name: "Proteína", eaten: eaten.p, goal: goals.p },
@@ -42,10 +71,11 @@ export default function EntrenoScreen() {
   function addMeal(e: React.FormEvent) {
     e.preventDefault();
     const p = toNum(form.p), c = toNum(form.c), g = toNum(form.g);
-    if (p + c + g === 0) return;
+    if (formKcal === 0) return;
     const name = form.name.trim() || `Comida ${meals.length + 1}`;
-    setMeals([...meals, { name, p, c, g }]);
-    setForm({ name: "", p: "", c: "", g: "" });
+    setMeals([...meals, { name, p, c, g, kcal: formKcal }]);
+    setForm(emptyForm);
+    setEstimate(null);
   }
 
   const [sel, setSel] = useState(weeklyVolume.length - 1);
@@ -127,7 +157,7 @@ export default function EntrenoScreen() {
               <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, minHeight: 36 }}>
                 <span className="ellipsis" style={{ fontSize: 15, fontWeight: 500 }}>{m.name}</span>
                 <span style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                  <span className="small muted">{m.p}P · {m.c}C · {m.g}G · {kcalOf(m.p, m.c, m.g)} kcal</span>
+                  <span className="small muted">{mealKcal(m)} kcal · {m.p}P · {m.c}C · {m.g}G</span>
                   <button
                     type="button"
                     aria-label={`Borrar ${m.name}`}
@@ -143,8 +173,44 @@ export default function EntrenoScreen() {
 
           <form onSubmit={addMeal} style={{ display: "flex", flexDirection: "column", gap: 10, background: "var(--card-2)", borderRadius: 14, padding: 14 }}>
             <span style={{ fontSize: 15, fontWeight: 600 }}>Añadir comida</span>
+
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) analyzePhoto(f);
+              }}
+            />
+            <button type="button" className="scan" onClick={() => fileRef.current?.click()} disabled={analyzing} style={{ minHeight: 56, padding: "8px 12px" }}>
+              <span className="scan-icon" style={{ width: 36, height: 36 }}><CameraIcon size={18} strokeWidth={2} /></span>
+              <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>{analyzing ? "Analizando la foto…" : "Foto de la comida"}</span>
+                <span className="tiny muted">Claude estima las calorías y los macros</span>
+              </span>
+            </button>
+            {photoError && <p className="error" role="alert" style={{ fontSize: 13 }}>{photoError}</p>}
+            {estimate && (
+              <p className="small muted" style={{ margin: 0, lineHeight: 1.45 }}>
+                Estimación (confianza {estimate.confidence}). {estimate.notes} Revisa los números antes de añadir.
+              </p>
+            )}
+
             <label className="field">Nombre
               <input className="input" placeholder="Ej. Merienda" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </label>
+            <label className="field">Calorías (kcal)
+              <input
+                className="input"
+                type="number"
+                inputMode="numeric"
+                min="0"
+                placeholder={String(kcalOf(toNum(form.p), toNum(form.c), toNum(form.g)) || "0")}
+                value={form.kcal}
+                onChange={(e) => setForm({ ...form, kcal: e.target.value })}
+              />
             </label>
             <div className="tiles">
               {([["p", "Proteína (g)"], ["c", "Carbos (g)"], ["g", "Grasa (g)"]] as const).map(([k, label]) => (
