@@ -121,7 +121,7 @@ export default function EntrenoScreen({ data, tips, hevy, error }: Props) {
     <main className="screen">
       <header className="header">
         <div className="header-titles">
-          <span className="eyebrow">Recomposición · 78 kg</span>
+          <span className="eyebrow">Recomposición · mantenimiento</span>
           <h1 className="title">Entreno</h1>
         </div>
         <span className="sync">

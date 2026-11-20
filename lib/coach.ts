@@ -13,7 +13,7 @@ const Coach = z.object({ push: z.array(Tip), pull: z.array(Tip), general: z.arra
 export type CoachTip = z.infer<typeof Tip>;
 export type CoachReport = z.infer<typeof Coach>;
 
-const SYSTEM = `Eres el entrenador personal de un hombre de 78 kg que busca recomposición corporal (ganar músculo y perder grasa) y mantenerse fuerte y atlético.
+const SYSTEM = `Eres el entrenador personal de un hombre de 78 kg que busca recomposición en mantenimiento: no quiere bajar de peso, sino perder grasa y ganar músculo, subiendo poco a poco de peso en músculo, y mantenerse fuerte y atlético.
 Su semana: lunes Push, martes Pull, miércoles rehabilitación de rodilla, jueves Push, viernes Pull.
 Está recién operado de rodilla: NO le propongas ejercicios ni cargas de pierna; para la rodilla limítate a recordarle que siga las pautas de su fisioterapeuta.
 
@@ -64,7 +64,7 @@ export async function coachTips(workouts: HevyWorkout[]): Promise<CoachReport | 
   if (!process.env.OPENAI_API_KEY || workouts.length === 0) return null;
   const key = workouts[0].id;
   try {
-    return await unstable_cache(() => generate(workouts), ["coach-report-v2", key], { revalidate: 60 * 60 * 24 * 7 })();
+    return await unstable_cache(() => generate(workouts), ["coach-report-v3", key], { revalidate: 60 * 60 * 24 * 7 })();
   } catch (err) {
     console.error("Coach", err);
     return null;

@@ -3,6 +3,7 @@ import EntrenoScreen from "@/components/EntrenoScreen";
 import { getRecentWorkouts, getRoutines, hevyConfigured, HevyError } from "@/lib/hevy";
 import { buildTraining, type TrainingData } from "@/lib/training";
 import { coachTips, type CoachReport } from "@/lib/coach";
+import { translateTraining } from "@/lib/exercise-names";
 
 export const metadata: Metadata = { title: "Entreno · Panel de Vida" };
 
@@ -14,6 +15,7 @@ export default async function Page() {
   if (hevyConfigured()) {
     try {
       const [routines, workouts] = await Promise.all([getRoutines(), getRecentWorkouts(90)]);
+      await translateTraining(routines, workouts);
       data = buildTraining(routines, workouts);
       tips = await coachTips(workouts);
     } catch (err) {

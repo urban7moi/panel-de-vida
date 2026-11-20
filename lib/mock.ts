@@ -36,10 +36,16 @@ export const workout = {
   ],
 };
 
-/** Objetivo de recomposición para 78 kg. Día de entreno: más carbohidratos. */
+/**
+ * Recomposición en mantenimiento para 78 kg: comer más o menos lo que gastas
+ * (con un ligero superávit los días de pesas) para ganar músculo poco a poco sin
+ * acumular grasa. Proteína 2,2 g/kg y grasa ~1 g/kg; el resto, carbohidratos.
+ *   Pesas:    170 P · 350 C · 75 G ≈ 2.755 kcal
+ *   Descanso: 170 P · 300 C · 75 G ≈ 2.555 kcal
+ */
 export const macroGoals = {
-  training: { p: 170, c: 320, g: 70 },
-  rest: { p: 170, c: 270, g: 70 },
+  training: { p: 170, c: 350, g: 75 },
+  rest: { p: 170, c: 300, g: 75 },
 };
 
 export const weeklyVolume = [38.2, 39.5, 37.8, 40.6, 41.9, 40.2, 42.8, 43.6]; // toneladas, 8 semanas
