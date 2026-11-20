@@ -22,6 +22,8 @@ const EQUIPMENT: Record<string, string> = {
   assisted: "Asistida",
   plate: "Disco",
   "trap bar": "Barra hexagonal",
+  "machine plates": "Máquina de discos",
+  "plate loaded": "Máquina de discos",
   "suspension": "TRX",
 };
 
@@ -113,31 +115,73 @@ const BASE: Record<string, string> = {
   "leg raise": "Elevación de piernas",
   "russian twist": "Giros rusos",
   "ab wheel": "Rueda abdominal",
+  "seated cable row - v grip": "Remo sentado en polea agarre en V",
+  "seated cable row - bar grip": "Remo sentado en polea con barra",
+  "lat pulldown - wide grip": "Jalón al pecho agarre abierto",
+  "reverse grip lat pulldown": "Jalón al pecho agarre supino",
+  "single arm lat pulldown": "Jalón a una mano",
+  "single arm cable row": "Remo a una mano en polea",
+  "iso-lateral chest press": "Press de pecho unilateral",
+  "iso-lateral high row": "Remo alto unilateral",
+  "iso-lateral low row": "Remo bajo unilateral",
+  "seated shoulder press": "Press de hombros sentado",
+  "ez bar biceps curl": "Curl de bíceps con barra Z",
+  "seated incline curl": "Curl inclinado sentado",
+  "incline dumbbell press": "Press inclinado con mancuernas",
+  "dumbbell fly": "Aperturas con mancuernas",
+  "low cable fly crossovers": "Cruces en polea baja",
+  "high cable fly crossovers": "Cruces en polea alta",
+  "rope cable curl": "Curl con cuerda en polea",
+  "cable curl": "Curl en polea",
+  "rope face pull": "Face pull con cuerda",
+  "triceps rope extension": "Extensión de tríceps con cuerda",
+  "single arm triceps pushdown": "Extensión de tríceps a una mano",
+  "jm press": "Press JM",
+  "landmine press": "Press landmine",
+  "inverted row": "Remo invertido",
+  "meadows rows": "Remo Meadows",
+  "rack pull": "Rack pull",
+  "good morning": "Buenos días",
+  "farmers walk": "Paseo del granjero",
+  "wall sit": "Sentadilla isométrica en pared",
+  "step up": "Subida al cajón",
+  "terminal knee extension": "Extensión terminal de rodilla",
+  "straight leg raise": "Elevación de pierna recta",
+  "side plank": "Plancha lateral",
+  "dead bug": "Dead bug",
+  "bird dog": "Bird dog",
 };
 
+const norm = (t: string) => t.toLowerCase().replace(/[’']/g, "").replace(/\s+/g, " ").trim();
+
+/** Traducción por diccionario; si el ejercicio o el material no están, devuelve null (lo traduce la IA). */
 function fromDictionary(title: string): string | null {
   const m = title.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
-  const base = (m ? m[1] : title).trim().toLowerCase();
-  const eq = m ? m[2].trim().toLowerCase() : null;
-  const es = BASE[base];
+  const es = BASE[norm(m ? m[1] : title)];
   if (!es) return null;
-  if (!eq) return es;
-  const eqEs = EQUIPMENT[eq];
+  if (!m) return es;
+  const eqEs = EQUIPMENT[norm(m[2])];
   return eqEs ? `${es} (${eqEs})` : null;
 }
 
-const Translations = z.object({ items: z.array(z.object({ en: z.string(), es: z.string() })) });
+const Translations = z.object({ items: z.array(z.object({ n: z.number(), es: z.string() })) });
 
+/** Traduce con la IA. Va numerado para no depender de que repita el nombre exacto. */
 async function translateWithAI(names: string[]): Promise<Record<string, string>> {
   const client = new OpenAI();
   const res = await client.responses.parse({
     model: process.env.OPENAI_MODEL || "gpt-5.4-mini",
     instructions:
-      'Traduce al castellano de España nombres de ejercicios de gimnasio, con el nombre que se usa en los gimnasios de España. Mantén el material entre paréntesis traducido (Barbell = Barra, Dumbbell = Mancuernas, Cable = Polea, Machine = Máquina, Smith Machine = Multipower). Devuelve cada nombre original en "en" y su traducción en "es".',
-    input: names.join("\n"),
+      'Traduce al castellano de España nombres de ejercicios de gimnasio, con el nombre que se usa en los gimnasios de España. Traduce también el material entre paréntesis (Barbell = Barra, Dumbbell = Mancuernas, Cable = Polea, Machine = Máquina, Smith Machine = Multipower, Bodyweight = Peso corporal, Weighted = Con lastre). Si un nombre ya está en castellano, déjalo igual. Devuelve un elemento por línea con su número en "n" y la traducción en "es".',
+    input: names.map((n, i) => `${i + 1}. ${n}`).join("\n"),
     text: { format: zodTextFormat(Translations, "traducciones") },
   });
-  return Object.fromEntries((res.output_parsed?.items ?? []).map((i) => [i.en, i.es]));
+  const out: Record<string, string> = {};
+  for (const item of res.output_parsed?.items ?? []) {
+    const original = names[item.n - 1];
+    if (original && item.es.trim()) out[original] = item.es.trim();
+  }
+  return out;
 }
 
 /** Devuelve un diccionario inglés → castellano para los nombres dados. */
@@ -153,7 +197,7 @@ export async function spanishNames(names: string[]): Promise<Record<string, stri
   if (missing.length && process.env.OPENAI_API_KEY) {
     try {
       const sorted = [...missing].sort();
-      const ai = await unstable_cache(() => translateWithAI(sorted), ["exercise-names-v1", ...sorted], {
+      const ai = await unstable_cache(() => translateWithAI(sorted), ["exercise-names-v2", ...sorted], {
         revalidate: 60 * 60 * 24 * 30,
       })();
       Object.assign(out, ai);

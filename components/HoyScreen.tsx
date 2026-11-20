@@ -94,11 +94,26 @@ export default function HoyScreen() {
   const toggleTask = (id: string) => setDayTasks((ts) => ts.map((x) => (x.id === id ? { ...x, done: !x.done } : x)));
   const removeTask = (id: string) => setDayTasks((ts) => ts.filter((x) => x.id !== id));
 
+  // --- Hora del entreno: las 12:00 salvo que la cambies para un día concreto ---
+  const [workoutTimes, setWorkoutTimes] = useStored<Record<string, string>>("entreno-horas", {});
+  const workoutTime = (activeDay && workoutTimes[activeDay]) || WORKOUT_TIME;
+  const [timeSheet, setTimeSheet] = useState<string | null>(null);
+  function saveWorkoutTime(time: string | null) {
+    if (!activeDay) return;
+    setWorkoutTimes((all) => {
+      const next = { ...all };
+      if (time && time !== WORKOUT_TIME) next[activeDay] = time;
+      else delete next[activeDay];
+      return next;
+    });
+    setTimeSheet(null);
+  }
+
   // --- Agenda del día: entreno + tareas, por hora ---
   const activeDate = week.find((d) => d.key === activeDay)?.date ?? now;
   const workout = activeDate ? WORKOUTS[activeDate.getDay()] : undefined;
   const agenda: AgendaItem[] = [
-    ...(workout ? [{ kind: "workout" as const, time: WORKOUT_TIME, ...workout }] : []),
+    ...(workout ? [{ kind: "workout" as const, time: workoutTime, ...workout }] : []),
     ...sorted.map((task) => ({ kind: "task" as const, time: task.time, task })),
   ].sort((a, b) => (a.time && b.time ? a.time.localeCompare(b.time) : a.time ? -1 : b.time ? 1 : 0));
 
@@ -135,7 +150,9 @@ export default function HoyScreen() {
   // --- Resumen ---
   const isToday = activeDay === today;
   const nextTask = sorted.find((t) => !t.done && t.time);
-  const greeting = !now ? "Hola" : now.getHours() < 13 ? "Buenos días" : now.getHours() < 21 ? "Buenas tardes" : "Buenas noches";
+  // Buenos días hasta las 12:59; buenas tardes desde las 13:00; buenas noches desde las 21:00 (hora de España).
+  const hour = now ? Number(new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", hour12: false }).format(now)) % 24 : 0;
+  const greeting = !now ? "Hola" : hour < 13 ? "Buenos días" : hour < 21 ? "Buenas tardes" : "Buenas noches";
   const dateLabel = now ? now.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" }) : "";
   const dayName = activeDate ? activeDate.toLocaleDateString("es-ES", { weekday: "long", day: "numeric" }) : "";
 
@@ -156,7 +173,7 @@ export default function HoyScreen() {
         </div>
         <p style={{ margin: 0, fontSize: 17, lineHeight: 1.5 }}>
           {workout ? (
-            <>{isToday ? "Hoy" : `El ${dayName}`} toca <strong>{workout.title.replace("Entreno · ", "")}</strong> a las {WORKOUT_TIME}. </>
+            <>{isToday ? "Hoy" : `El ${dayName}`} toca <strong>{workout.title.replace("Entreno · ", "")}</strong> a las {workoutTime}. </>
           ) : (
             <>{isToday ? "Hoy" : `El ${dayName}`} es día de descanso. </>
           )}
@@ -218,7 +235,13 @@ export default function HoyScreen() {
           <div className="list">
             {agenda.map((item) =>
               item.kind === "workout" ? (
-                <div className="row" key="workout">
+                <button
+                  type="button"
+                  className="row row-btn"
+                  key="workout"
+                  onClick={() => setTimeSheet(workoutTime)}
+                  aria-label={`${item.title} a las ${item.time}. Cambiar hora`}
+                >
                   <div className="time-col">
                     <span style={{ fontSize: 15, fontWeight: 600 }}>{item.time}</span>
                   </div>
@@ -227,7 +250,8 @@ export default function HoyScreen() {
                     <span style={{ fontSize: 16, fontWeight: 600 }}>{item.title}</span>
                     <span className="small muted">{item.detail}</span>
                   </div>
-                </div>
+                  <span className="tiny" style={{ color: "var(--google)", flexShrink: 0 }}>Cambiar hora</span>
+                </button>
               ) : (
                 <div className="row" key={item.task.id}>
                   <div className="time-col">
@@ -336,6 +360,37 @@ export default function HoyScreen() {
           )
         )}
       </section>
+
+      {/* Hoja para cambiar la hora del entreno */}
+      {timeSheet !== null && workout && (
+        <div className="sheet-backdrop" onClick={() => setTimeSheet(null)}>
+          <form
+            className="sheet"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveWorkoutTime(timeSheet);
+            }}
+            aria-labelledby="h-hora"
+          >
+            <div className="sheet-grip" aria-hidden="true" />
+            <h2 id="h-hora" style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Hora del entreno</h2>
+            <span className="small muted">{workout.title} · {isToday ? "hoy" : dayName}</span>
+            <label className="field">Hora
+              <input className="input" type="time" required value={timeSheet} onChange={(e) => setTimeSheet(e.target.value)} />
+            </label>
+            {workoutTime !== WORKOUT_TIME && (
+              <button type="button" className="link-btn" style={{ alignSelf: "flex-start" }} onClick={() => saveWorkoutTime(null)}>
+                Volver a las {WORKOUT_TIME}
+              </button>
+            )}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button type="button" className="btn-secondary" onClick={() => setTimeSheet(null)}>Cancelar</button>
+              <button type="submit" className="btn-primary" disabled={!timeSheet}>Guardar</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Hoja para añadir tarea */}
       {sheet && (
