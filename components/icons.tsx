@@ -79,3 +79,28 @@ export const BalanceIcon = (p: P) => (
     <path d="M12 4v16M5 8h14M5 8l-3 6h6zM19 8l-3 6h6z" />
   </Base>
 );
+
+/** Push: brazo empujando hacia fuera (flecha alejándose de una barra). */
+export const PushIcon = (p: P) => (
+  <Base strokeWidth={2} {...p}>
+    <path d="M4 5v14" />
+    <path d="M8 12h12" />
+    <path d="M16 8l4 4-4 4" />
+  </Base>
+);
+
+/** Pull: tirar hacia ti (flecha que vuelve hacia una barra). */
+export const PullIcon = (p: P) => (
+  <Base strokeWidth={2} {...p}>
+    <path d="M20 5v14" />
+    <path d="M4 12h12" />
+    <path d="M12 8l4 4-4 4" />
+  </Base>
+);
+
+/** General: destello. */
+export const SparkIcon = (p: P) => (
+  <Base strokeWidth={2} {...p}>
+    <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.5 2.5M15.2 15.2l2.5 2.5M6.3 17.7l2.5-2.5M15.2 8.8l2.5-2.5" />
+  </Base>
+);

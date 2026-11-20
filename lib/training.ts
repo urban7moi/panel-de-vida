@@ -29,9 +29,9 @@ function madridDateKey(d: Date) {
 // --- Cálculos sobre series ---------------------------------------------------
 
 const isWorking = (s: HevySet) => s.type !== "warmup";
-/** 1RM estimado (Epley). Solo con peso y entre 1 y 12 repeticiones. */
+/** 1RM estimado (Epley). Solo con peso y entre 1 y 15 repeticiones. */
 export function e1rm(s: HevySet) {
-  if (!s.weight_kg || !s.reps || s.reps > 12 || s.reps < 1) return 0;
+  if (!s.weight_kg || !s.reps || s.reps > 15 || s.reps < 1) return 0;
   return s.weight_kg * (1 + s.reps / 30);
 }
 const kg = (n: number) => `${n.toLocaleString("es-ES", { maximumFractionDigits: 1 })} kg`;
@@ -207,7 +207,7 @@ export function buildTraining(routines: HevyRoutine[], workouts: HevyWorkout[]):
         })
         .flatMap((w) => w.exercises.filter((e) => e.exercise_template_id === id).flatMap((e) => e.sets.filter(isWorking)));
     const cur = window(0, 28);
-    const prev = window(28, 56);
+    const prev = window(28, 90);
     const curBest = bestSet(cur.length ? cur : prev);
     const a = Math.max(0, ...cur.map(e1rm));
     const b = Math.max(0, ...prev.map(e1rm));
@@ -216,7 +216,13 @@ export function buildTraining(routines: HevyRoutine[], workouts: HevyWorkout[]):
       name,
       best: curBest ? `Mejor: ${setLabel(curBest)}` : "",
       e1rm: a || b ? `1RM ${Math.round(a || b)} kg` : "",
-      trend: !a || !b ? "Sin datos para comparar" : Math.abs(diff) < 1 ? "Sin cambios · 4 sem" : `${diff > 0 ? "+" : ""}${diff} kg en 4 sem`,
+      trend: !a
+        ? "Sin hacerlo en 4 sem"
+        : !b
+          ? "Primeras semanas"
+          : Math.abs(diff) < 1
+            ? "Sin cambios vs. antes"
+            : `${diff > 0 ? "+" : ""}${diff} kg vs. antes`,
       up: !a || !b ? null : Math.abs(diff) < 1 ? false : diff > 0,
     };
   });

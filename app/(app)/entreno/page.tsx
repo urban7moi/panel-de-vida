@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import EntrenoScreen from "@/components/EntrenoScreen";
 import { getRecentWorkouts, getRoutines, hevyConfigured, HevyError } from "@/lib/hevy";
 import { buildTraining, type TrainingData } from "@/lib/training";
-import { coachTips, type CoachTip } from "@/lib/coach";
+import { coachTips, type CoachReport } from "@/lib/coach";
 
 export const metadata: Metadata = { title: "Entreno · Panel de Vida" };
 
 export default async function Page() {
   let data: TrainingData | null = null;
-  let tips: CoachTip[] | null = null;
+  let tips: CoachReport | null = null;
   let error: string | null = null;
 
   if (hevyConfigured()) {

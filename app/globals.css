@@ -192,3 +192,9 @@ button, input { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .spinner, .analyzing::after { animation-duration: 3s; }
 }
+
+/* Informe del entrenador */
+.coach-group { display: flex; flex-direction: column; gap: 8px; }
+.coach-group + .coach-group { margin-top: 8px; }
+.coach-head { display: flex; align-items: center; gap: 10px; }
+.coach-head .tip-icon { width: 32px; height: 32px; border-radius: 9px; }

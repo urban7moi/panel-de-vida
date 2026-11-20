@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BalanceIcon, CameraIcon, CheckIcon, FlatIcon, InfoIcon, PlayIcon } from "./icons";
+import { CameraIcon, InfoIcon, PlayIcon, PushIcon, PullIcon, SparkIcon } from "./icons";
 import { macroGoals } from "@/lib/mock";
 import type { TrainingData } from "@/lib/training";
-import type { CoachTip } from "@/lib/coach";
+import type { CoachReport } from "@/lib/coach";
 import { useStored } from "@/lib/useStored";
 import { shrinkImage } from "@/lib/image";
 
@@ -25,7 +25,7 @@ function todayKey() {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
-type Props = { data: TrainingData | null; tips: CoachTip[] | null; hevy: "ok" | "error" | "sin-configurar"; error: string | null };
+type Props = { data: TrainingData | null; tips: CoachReport | null; hevy: "ok" | "error" | "sin-configurar"; error: string | null };
 
 /** Lunes, martes, jueves y viernes son días de pesas. */
 function isGymDay() {
@@ -378,23 +378,30 @@ export default function EntrenoScreen({ data, tips, hevy, error }: Props) {
       )}
 
       {/* Entrenador */}
-      {tips && tips.length > 0 && (
+      {tips && tips.push.length + tips.pull.length + tips.general.length > 0 && (
         <section className="section" aria-labelledby="h-coach">
           <h2 id="h-coach" className="section-title">Tu entrenador</h2>
-          {tips.map((t) => (
-            <div className="tip" key={t.title}>
-              <span className="tip-icon">
-                {t.kind === "flat" && <FlatIcon size={18} style={{ color: "var(--warn)" }} />}
-                {t.kind === "balance" && <BalanceIcon size={18} style={{ color: "var(--google)" }} />}
-                {(t.kind === "ok" || t.kind === "up") && <CheckIcon size={18} strokeWidth={2} style={{ color: "var(--good)" }} />}
-                {t.kind === "warn" && <InfoIcon size={18} style={{ color: "var(--warn)" }} />}
-              </span>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-                <span style={{ fontSize: 16, fontWeight: 600 }}>{t.title}</span>
-                <span className="tip-body">{t.body}</span>
+          {([
+            ["push", "Push", tips.push, <PushIcon key="i" size={18} />, "var(--accent-text)"],
+            ["pull", "Pull", tips.pull, <PullIcon key="i" size={18} />, "var(--google)"],
+            ["general", "General", tips.general, <SparkIcon key="i" size={18} />, "var(--good)"],
+          ] as const).map(([key, label, list, icon, color]) =>
+            list.length === 0 ? null : (
+              <div key={key} className="coach-group">
+                <div className="coach-head" style={{ color }}>
+                  <span className="tip-icon" style={{ color }}>{icon}</span>
+                  <span className="label-caps" style={{ color }}>{label}</span>
+                </div>
+                {list.map((t) => (
+                  <div className="tip" key={t.title} style={{ flexDirection: "column", gap: 6 }}>
+                    <span style={{ fontSize: 16, fontWeight: 600 }}>{t.title}</span>
+                    <span className="tip-body">{t.body}</span>
+                  </div>
+                ))}
               </div>
-            </div>
-          ))}
+            ),
+          )}
+          {data?.lastWorkout && <span className="footnote">Análisis tras tu entreno del {data.lastWorkout.date}</span>}
         </section>
       )}
     </main>
