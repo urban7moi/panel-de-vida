@@ -56,8 +56,8 @@ function initialsOf(name: string) {
   );
 }
 
-/** Últimos emails de la bandeja de entrada (por defecto, 3 días y 15 como máximo). */
-export async function recentMail(days = 3, max = 15): Promise<Mail[]> {
+/** Los últimos `count` emails de la bandeja de entrada y cuántos hay sin leer en total. */
+export async function recentMail(count = 3): Promise<{ mails: Mail[]; unreadTotal: number }> {
   const cred = credentials();
   if (!cred) throw new Error("sin-configurar");
   const client = new ImapFlow({
@@ -70,18 +70,25 @@ export async function recentMail(days = 3, max = 15): Promise<Mail[]> {
   });
   await client.connect();
   const out: (Mail & { ts: number })[] = [];
+  let unreadTotal = 0;
   try {
     const lock = await client.getMailboxLock("INBOX", { readOnly: true });
     try {
-      const since = new Date(Date.now() - days * 864e5);
-      const uids = ((await client.search({ since }, { uid: true })) || []).slice(-max);
-      if (uids.length === 0) return [];
+      const exists = client.mailbox ? client.mailbox.exists : 0;
+      if (!exists) return { mails: [], unreadTotal: 0 };
+      const unseen = (await client.search({ seen: false }, { uid: true })) || [];
+      unreadTotal = unseen.length;
+      // Los últimos mensajes por número de secuencia (los que entraron más tarde).
+      const range = `${Math.max(1, exists - count + 1)}:*`;
       const gmail = client.capabilities.has("X-GM-EXT-1");
-      const msgs = await client.fetchAll(
-        uids,
-        { uid: true, envelope: true, flags: true, internalDate: true, labels: gmail, source: { maxLength: 16_000 } },
-        { uid: true },
-      );
+      const msgs = await client.fetchAll(range, {
+        uid: true,
+        envelope: true,
+        flags: true,
+        internalDate: true,
+        labels: gmail,
+        source: { maxLength: 16_000 },
+      });
       for (const m of msgs) {
         const from = m.envelope?.from?.[0];
         const name = from?.name || from?.address || "Desconocido";
@@ -115,5 +122,9 @@ export async function recentMail(days = 3, max = 15): Promise<Mail[]> {
     await client.logout().catch(() => {});
   }
   // Más recientes primero.
-  return out.sort((a, b) => b.ts - a.ts).map((m) => ({ ...m, ts: undefined })) as Mail[];
+  const mails = out
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, count)
+    .map((m) => ({ ...m, ts: undefined })) as Mail[];
+  return { mails, unreadTotal };
 }

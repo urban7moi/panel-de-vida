@@ -13,7 +13,7 @@ type Task = {
 };
 
 type Mail = { id: string; from: string; initials: string; subject: string; preview: string; time: string; important: boolean; unread: boolean };
-type MailState = { status: "cargando" | "ok" | "error" | "sin-configurar"; mails: Mail[]; error?: string };
+type MailState = { status: "cargando" | "ok" | "error" | "sin-configurar"; mails: Mail[]; unreadTotal?: number; error?: string };
 
 type AgendaItem =
   | { kind: "workout"; time: string; title: string; detail: string }
@@ -107,12 +107,10 @@ export default function HoyScreen() {
   useEffect(() => {
     fetch("/api/mail")
       .then((r) => r.json())
-      .then((j) => setMail({ status: j.status ?? "error", mails: j.mails ?? [], error: j.error }))
+      .then((j) => setMail({ status: j.status ?? "error", mails: j.mails ?? [], unreadTotal: j.unreadTotal ?? 0, error: j.error }))
       .catch(() => setMail({ status: "error", mails: [], error: "No se pudo conectar con tu correo." }));
   }, []);
-  const [mailTab, setMailTab] = useState<"imp" | "all">("imp");
-  const importantMails = mail.mails.filter((m) => m.important);
-  const visibleMails = mailTab === "imp" ? importantMails : mail.mails;
+  const unread = mail.unreadTotal ?? 0;
 
   // --- Resumen ---
   const isToday = activeDay === today;
@@ -151,8 +149,8 @@ export default function HoyScreen() {
               {nextTask && <> La próxima: {nextTask.title} a las {nextTask.time}.</>}
             </>
           )}
-          {isToday && mail.status === "ok" && importantMails.length > 0 && (
-            <> Tienes <strong>{importantMails.length} {importantMails.length === 1 ? "email importante" : "emails importantes"}</strong>.</>
+          {isToday && mail.status === "ok" && unread > 0 && (
+            <> Tienes <strong>{unread} {unread === 1 ? "email sin leer" : "emails sin leer"}</strong>.</>
           )}
         </p>
         <div className="tiles">
@@ -274,7 +272,7 @@ export default function HoyScreen() {
       <section className="section" aria-labelledby="h-mail">
         <div className="section-head">
           <h2 id="h-mail" className="section-title">Emails</h2>
-          {mail.status === "ok" && <span className="small muted">Últimos 3 días</span>}
+          {mail.status === "ok" && <span className="small muted">{unread > 0 ? `${unread} sin leer` : "Todo leído"}</span>}
         </div>
         {mail.status === "sin-configurar" ? (
           <div className="card">
@@ -287,34 +285,26 @@ export default function HoyScreen() {
         ) : mail.status === "cargando" ? (
           <div className="skeleton" style={{ height: 220 }} />
         ) : (
-          <>
-            <div className="segmented" role="tablist" aria-label="Filtrar emails">
-              <button role="tab" aria-selected={mailTab === "imp"} onClick={() => setMailTab("imp")}>Importantes · {importantMails.length}</button>
-              <button role="tab" aria-selected={mailTab === "all"} onClick={() => setMailTab("all")}>Todos · {mail.mails.length}</button>
-            </div>
-            {visibleMails.length === 0 ? (
-              <div className="card"><span className="small muted">{mailTab === "imp" ? "Nada importante en los últimos 3 días." : "Bandeja vacía en los últimos 3 días."}</span></div>
-            ) : (
-              <div className="list">
-                {visibleMails.map((m) => (
-                  <div className="row mail" key={m.id}>
-                    <span className="avatar" aria-hidden="true">{m.initials}</span>
-                    <div className="grow" style={{ gap: 2 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                        <span className="ellipsis" style={{ fontSize: 15, fontWeight: m.unread ? 700 : 500 }}>
-                          {m.unread && <i className="dot" style={{ background: "var(--accent)", marginRight: 6, verticalAlign: "middle" }} />}
-                          {m.from}
-                        </span>
-                        <span className="tiny muted" style={{ flexShrink: 0 }}>{m.time}</span>
-                      </div>
-                      <span className="ellipsis" style={{ fontSize: 14, fontWeight: m.unread ? 600 : 500 }}>{m.subject}</span>
-                      {m.preview && <span className="ellipsis small muted">{m.preview}</span>}
+          mail.mails.length === 0 ? (
+            <div className="card"><span className="small muted">Bandeja de entrada vacía.</span></div>
+          ) : (
+            <div className="list">
+              {mail.mails.map((m) => (
+                <div className="row mail" key={m.id}>
+                  <span className="avatar" aria-hidden="true">{m.initials}</span>
+                  <div className="grow" style={{ gap: 2 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                      <span className="ellipsis" style={{ fontSize: 15, fontWeight: m.unread ? 700 : 500 }}>{m.from}</span>
+                      <span className="tiny muted" style={{ flexShrink: 0 }}>{m.time}</span>
                     </div>
+                    <span className="ellipsis" style={{ fontSize: 14, fontWeight: m.unread ? 600 : 400 }}>{m.subject}</span>
+                    {m.preview && <span className="ellipsis small muted">{m.preview}</span>}
+                    {m.unread && <span className="chip" style={{ marginTop: 4 }}>No leído</span>}
                   </div>
-                ))}
-              </div>
-            )}
-          </>
+                </div>
+              ))}
+            </div>
+          )
         )}
       </section>
 
