@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { z } from "zod";
-import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { zodTextFormat } from "openai/helpers/zod";
 import { AUTH_COOKIE, tokenFor } from "@/lib/auth";
 
 export const maxDuration = 60;
@@ -39,9 +39,9 @@ async function isLoggedIn() {
 
 export async function POST(req: Request) {
   if (!(await isLoggedIn())) return NextResponse.json({ error: "Inicia sesión de nuevo." }, { status: 401 });
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json(
-      { error: "Falta configurar ANTHROPIC_API_KEY en Vercel para estimar comidas por foto." },
+      { error: "Falta configurar OPENAI_API_KEY en Vercel para estimar comidas por foto." },
       { status: 503 },
     );
   }
@@ -55,31 +55,28 @@ export async function POST(req: Request) {
   }
   const data = Buffer.from(await file.arrayBuffer()).toString("base64");
 
-  const client = new Anthropic();
+  const client = new OpenAI();
   try {
-    const response = await client.beta.messages.parse({
-      model: "claude-opus-5-5",
-      max_tokens: 4000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: { effort: "low", format: betaZodOutputFormat(Estimate) },
-      system: SYSTEM,
-      messages: [
+    const response = await client.responses.parse({
+      model: process.env.OPENAI_MODEL || "gpt-5.4-mini",
+      instructions: SYSTEM,
+      input: [
         {
           role: "user",
           content: [
-            { type: "image", source: { type: "base64", media_type: file.type as Media, data } },
+            { type: "input_image", image_url: `data:${file.type};base64,${data}`, detail: "auto" },
             {
-              type: "text",
+              type: "input_text",
               text: note ? `Estima las calorías y macros. Nota del usuario: ${note}` : "Estima las calorías y macros.",
             },
           ],
         },
       ],
+      text: { format: zodTextFormat(Estimate, "estimacion_comida") },
     });
 
-    const est = response.parsed_output;
-    if (response.stop_reason === "refusal" || !est) {
+    const est = response.output_parsed;
+    if (!est) {
       return NextResponse.json({ error: "No he podido analizar la foto. Prueba con otra." }, { status: 422 });
     }
     if (!est.is_food) {
@@ -96,14 +93,14 @@ export async function POST(req: Request) {
       notes: est.notes,
     });
   } catch (err) {
-    if (err instanceof Anthropic.RateLimitError) {
-      return NextResponse.json({ error: "Demasiadas peticiones. Prueba en un minuto." }, { status: 429 });
+    if (err instanceof OpenAI.RateLimitError) {
+      return NextResponse.json({ error: "Demasiadas peticiones o sin saldo en OpenAI. Revisa tu cuenta." }, { status: 429 });
     }
-    if (err instanceof Anthropic.AuthenticationError) {
-      return NextResponse.json({ error: "La clave de la API de Claude no es válida." }, { status: 502 });
+    if (err instanceof OpenAI.AuthenticationError) {
+      return NextResponse.json({ error: "La clave de OpenAI no es válida." }, { status: 502 });
     }
-    if (err instanceof Anthropic.APIError) {
-      console.error("Claude", err.status, err.message);
+    if (err instanceof OpenAI.APIError) {
+      console.error("OpenAI", err.status, err.message);
       return NextResponse.json({ error: "Error al analizar la foto. Prueba de nuevo." }, { status: 502 });
     }
     throw err;

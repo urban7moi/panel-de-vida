@@ -188,7 +188,7 @@ export default function EntrenoScreen() {
               <span className="scan-icon" style={{ width: 36, height: 36 }}><CameraIcon size={18} strokeWidth={2} /></span>
               <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 <span style={{ fontSize: 15, fontWeight: 600 }}>{analyzing ? "Analizando la foto…" : "Foto de la comida"}</span>
-                <span className="tiny muted">Claude estima las calorías y los macros</span>
+                <span className="tiny muted">La IA estima las calorías y los macros</span>
               </span>
             </button>
             {photoError && <p className="error" role="alert" style={{ fontSize: 13 }}>{photoError}</p>}
