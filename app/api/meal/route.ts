@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import OpenAI from "openai";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
-import { AUTH_COOKIE, tokenFor } from "@/lib/auth";
+import { isLoggedIn } from "@/lib/api-auth";
 
 export const maxDuration = 60;
 
@@ -29,13 +28,6 @@ const SYSTEM = `Eres un nutricionista que estima calorías y macros a partir de 
 
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 type Media = (typeof ALLOWED)[number];
-
-async function isLoggedIn() {
-  const password = process.env.APP_PASSWORD?.trim();
-  if (!password) return process.env.NODE_ENV !== "production";
-  const jar = await cookies();
-  return jar.get(AUTH_COOKIE)?.value === (await tokenFor(password));
-}
 
 export async function POST(req: Request) {
   if (!(await isLoggedIn())) return NextResponse.json({ error: "Inicia sesión de nuevo." }, { status: 401 });
