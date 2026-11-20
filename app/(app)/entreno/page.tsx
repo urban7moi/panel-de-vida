@@ -1,33 +1,97 @@
 import type { Metadata } from "next";
-import EntrenoScreen from "@/components/EntrenoScreen";
-import { getRecentWorkouts, getRoutines, hevyConfigured, HevyError } from "@/lib/hevy";
-import { buildTraining, type TrainingData } from "@/lib/training";
-import { coachTips, type CoachReport } from "@/lib/coach";
-import { translateTraining } from "@/lib/exercise-names";
+import { Suspense } from "react";
+import Macros from "@/components/entreno/Macros";
+import Progress from "@/components/entreno/Progress";
+import TodayCard from "@/components/entreno/TodayCard";
+import Coach from "@/components/entreno/Coach";
+import { coachTips } from "@/lib/coach";
+import { loadTraining } from "@/lib/load-training";
 
 export const metadata: Metadata = { title: "Entreno · Panel de Vida" };
 
-export default async function Page() {
-  let data: TrainingData | null = null;
-  let tips: CoachReport | null = null;
-  let error: string | null = null;
+// La pantalla aparece al instante: cada sección se rellena en cuanto llegan sus datos.
+export default function Page() {
+  return (
+    <main className="screen">
+      <header className="header">
+        <div className="header-titles">
+          <span className="eyebrow">Recomposición · mantenimiento</span>
+          <h1 className="title">Entreno</h1>
+        </div>
+        <Suspense fallback={<span className="sync"><i className="dot pulse" style={{ background: "var(--muted)" }} />Hevy</span>}>
+          <HevyStatus />
+        </Suspense>
+      </header>
 
-  if (hevyConfigured()) {
-    try {
-      const [routines, workouts] = await Promise.all([getRoutines(), getRecentWorkouts(90)]);
-      await translateTraining(routines, workouts);
-      data = buildTraining(routines, workouts);
-      tips = await coachTips(workouts);
-    } catch (err) {
-      console.error("Hevy", err);
-      error =
-        err instanceof HevyError && (err.status === 401 || err.status === 403)
-          ? "Hevy no acepta la clave. Revisa HEVY_API_KEY en Vercel (y que tengas Hevy Pro)."
-          : err instanceof HevyError && err.status === 429
-            ? "Hevy ha limitado las peticiones. Prueba en unos minutos."
-            : "No se pudo conectar con Hevy. Prueba en un rato.";
-    }
-  }
+      <Suspense fallback={<div className="skeleton" style={{ height: 330 }} />}>
+        <TodaySection />
+      </Suspense>
 
-  return <EntrenoScreen data={data} tips={tips} hevy={hevyConfigured() ? (error ? "error" : "ok") : "sin-configurar"} error={error} />;
+      <Macros />
+
+      <Suspense fallback={<SectionSkeleton title="Progreso" height={420} />}>
+        <ProgressSection />
+      </Suspense>
+
+      <Suspense fallback={<SectionSkeleton title="Tu entrenador" height={260} note="Preparando tu análisis…" />}>
+        <CoachSection />
+      </Suspense>
+    </main>
+  );
+}
+
+function SectionSkeleton({ title, height, note }: { title: string; height: number; note?: string }) {
+  return (
+    <section className="section">
+      <div className="section-head">
+        <h2 className="section-title">{title}</h2>
+        {note && <span className="small muted">{note}</span>}
+      </div>
+      <div className="skeleton" style={{ height }} />
+    </section>
+  );
+}
+
+async function HevyStatus() {
+  const t = await loadTraining();
+  const ok = t.status === "ok";
+  return (
+    <span className="sync">
+      <i className="dot" style={{ background: ok ? "var(--good)" : "var(--warn)" }} />
+      {ok ? "Hevy · conectado" : t.status === "error" ? "Hevy · error" : "Hevy · sin conectar"}
+    </span>
+  );
+}
+
+async function TodaySection() {
+  const t = await loadTraining();
+  if (t.status === "sin-configurar")
+    return (
+      <section className="card">
+        <h2 className="label-caps">Conecta Hevy</h2>
+        <p className="small muted" style={{ margin: 0, lineHeight: 1.5 }}>
+          Añade tu clave de la API de Hevy en Vercel (variable HEVY_API_KEY) y vuelve a desplegar para ver tus rutinas y tu progreso.
+        </p>
+      </section>
+    );
+  if (t.status === "error")
+    return (
+      <section className="card">
+        <h2 className="label-caps">Hevy</h2>
+        <p className="error" role="alert" style={{ margin: 0 }}>{t.error}</p>
+      </section>
+    );
+  return <TodayCard session={t.data.session} />;
+}
+
+async function ProgressSection() {
+  const t = await loadTraining();
+  return t.status === "ok" ? <Progress data={t.data} /> : null;
+}
+
+async function CoachSection() {
+  const t = await loadTraining();
+  if (t.status !== "ok") return null;
+  const tips = await coachTips(t.workouts);
+  return tips ? <Coach tips={tips} lastDate={t.data.lastWorkout?.date ?? null} /> : null;
 }

@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Tu día y tu entreno en un solo sitio.",
     start_url: "/",
     display: "standalone",
-    background_color: "#262624",
+    background_color: "#D97757",
     theme_color: "#262624",
     lang: "es",
     icons: [

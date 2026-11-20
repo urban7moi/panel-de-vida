@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CameraIcon, InfoIcon, PlayIcon, PushIcon, PullIcon, SparkIcon } from "./icons";
+import { CameraIcon, InfoIcon } from "../icons";
 import { macroGoals } from "@/lib/mock";
-import type { TrainingData } from "@/lib/training";
-import type { CoachReport } from "@/lib/coach";
 import { useStored } from "@/lib/useStored";
 import { shrinkImage } from "@/lib/image";
 
@@ -25,16 +23,15 @@ function todayKey() {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
-type Props = { data: TrainingData | null; tips: CoachReport | null; hevy: "ok" | "error" | "sin-configurar"; error: string | null };
-
 /** Lunes, martes, jueves y viernes son días de pesas. */
 function isGymDay() {
   const d = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Madrid", weekday: "short" }).format(new Date());
   return ["Mon", "Tue", "Thu", "Fri"].includes(d);
 }
 
-export default function EntrenoScreen({ data, tips, hevy, error }: Props) {
-  const session = data?.session ?? null;
+const steps = ["Identificando los alimentos…", "Calculando la ración…", "Estimando calorías y macros…"];
+
+export default function Macros() {
   const gymDay = isGymDay();
   const goals = gymDay ? macroGoals.training : macroGoals.rest;
   const [meals, setMeals] = useStored<Meal[]>(`comidas-${todayKey()}`, []);
@@ -45,14 +42,12 @@ export default function EntrenoScreen({ data, tips, hevy, error }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [step, setStep] = useState(0);
-  const steps = ["Identificando los alimentos…", "Calculando la ración…", "Estimando calorías y macros…"];
-
   useEffect(() => {
     if (!analyzing) return;
     setStep(0);
     const t = setInterval(() => setStep((s) => Math.min(s + 1, steps.length - 1)), 2200);
     return () => clearInterval(t);
-  }, [analyzing, steps.length]);
+  }, [analyzing]);
 
   const eaten = meals.reduce(
     (a, m) => ({ p: a.p + m.p, c: a.c + m.c, g: a.g + m.g }),
@@ -108,85 +103,7 @@ export default function EntrenoScreen({ data, tips, hevy, error }: Props) {
     });
   }
 
-  const vols = data?.weeklyVolume ?? [{ label: "", tonnes: 0 }];
-  const [sel, setSel] = useState(vols.length - 1);
-  const max = Math.max(0.1, ...vols.map((v) => v.tonnes)) * 1.05;
-  // Compara la última semana completa con la primera semana con datos (la actual aún no ha terminado).
-  const firstNonZero = vols.slice(0, -1).find((v) => v.tonnes > 0)?.tonnes ?? 0;
-  const lastFull = vols.length > 1 ? vols[vols.length - 2].tonnes : 0;
-  const volTrend =
-    firstNonZero > 0 && lastFull > 0 ? `${lastFull >= firstNonZero ? "+" : ""}${Math.round(((lastFull - firstNonZero) / firstNonZero) * 100)}% en 7 sem` : "";
-
   return (
-    <main className="screen">
-      <header className="header">
-        <div className="header-titles">
-          <span className="eyebrow">Recomposición · mantenimiento</span>
-          <h1 className="title">Entreno</h1>
-        </div>
-        <span className="sync">
-          <i className="dot" style={{ background: hevy === "ok" ? "var(--good)" : "var(--warn)" }} />
-          {hevy === "ok" ? "Hevy · conectado" : hevy === "error" ? "Hevy · error" : "Hevy · sin conectar"}
-        </span>
-      </header>
-
-      {hevy === "sin-configurar" && (
-        <section className="card">
-          <h2 className="label-caps">Conecta Hevy</h2>
-          <p className="small muted" style={{ margin: 0, lineHeight: 1.5 }}>
-            Añade tu clave de la API de Hevy en Vercel (variable HEVY_API_KEY) y vuelve a desplegar para ver tus rutinas y tu progreso.
-          </p>
-        </section>
-      )}
-      {error && (
-        <section className="card">
-          <h2 className="label-caps">Hevy</h2>
-          <p className="error" role="alert" style={{ margin: 0 }}>{error}</p>
-        </section>
-      )}
-
-      {/* Entreno de hoy */}
-      {session && (
-        <section className="card" aria-labelledby="h-hoy">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-            <div className="header-titles">
-              <span className="label-caps">{session.when} toca</span>
-              <h2 id="h-hoy" style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em" }}>{session.label}</h2>
-            </div>
-            {session.routineTitle && <span className="small muted" style={{ paddingTop: 4, textAlign: "right" }}>{session.routineTitle}</span>}
-          </div>
-
-          {session.kind === "rehab" && (
-            <p className="small muted" style={{ margin: 0, lineHeight: 1.5 }}>
-              Día de rodilla: haz los ejercicios que te ha pautado tu fisioterapeuta. Sin cargas de pierna hasta que te den el alta.
-            </p>
-          )}
-          {session.kind !== "rehab" && !session.routineId && (
-            <p className="small muted" style={{ margin: 0, lineHeight: 1.5 }}>
-              No encuentro una rutina de {session.label} en Hevy. Pon &quot;{session.label}&quot; en el nombre de la rutina para que aparezca aquí.
-            </p>
-          )}
-          {session.exercises.length > 0 && (
-            <div>
-              {session.exercises.map((x, i) => (
-                <div className="row" key={x.name + i} style={{ padding: "12px 0" }}>
-                  <div className="grow" style={{ gap: 2 }}>
-                    <span style={{ fontSize: 15, fontWeight: 500 }}>{x.name}</span>
-                    {x.last && <span className="small muted">{x.last}</span>}
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
-                    <span style={{ fontSize: 15, fontWeight: 600 }}>{x.target}</span>
-                    {x.note && <span className="tiny muted">{x.note}</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <a href="hevy://" className="btn-primary"><PlayIcon size={18} />Empezar en Hevy</a>
-        </section>
-      )}
-
-      {/* Macros */}
       <section className="section" aria-labelledby="h-macros">
         <div className="section-head">
           <h2 id="h-macros" className="section-title">Macros de hoy</h2>
@@ -314,96 +231,5 @@ export default function EntrenoScreen({ data, tips, hevy, error }: Props) {
           </div>
         </div>
       </section>
-
-      {/* Progreso */}
-      {data && (
-        <section className="section" aria-labelledby="h-prog">
-          <div className="section-head">
-            <h2 id="h-prog" className="section-title">Progreso</h2>
-            {data.lastWorkout && <span className="small muted">Último: {data.lastWorkout.date}</span>}
-          </div>
-          <div className="tiles">
-            <div className="tile outlined"><span style={{ fontSize: 20, fontWeight: 700 }}>{data.stats.workoutsMonth}</span><span className="tile-label">Entrenos mes</span></div>
-            <div className="tile outlined"><span style={{ fontSize: 20, fontWeight: 700 }}>{data.stats.volumeWeek}</span><span className="tile-label">Volumen semana</span></div>
-            <div className="tile outlined"><span style={{ fontSize: 20, fontWeight: 700 }}>{data.stats.prsMonth}</span><span className="tile-label">Récords mes</span></div>
-          </div>
-          <div className="card" style={{ padding: "18px 16px 14px", gap: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <span className="small muted">
-                  Volumen semanal · {sel === vols.length - 1 ? "esta semana" : `semana del ${vols[sel].label}`}
-                </span>
-                <span style={{ fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em" }}>
-                  {vols[sel].tonnes.toLocaleString("es-ES")} t
-                </span>
-              </div>
-              {volTrend && <span className="tiny muted">{volTrend}</span>}
-            </div>
-            <div className="chart">
-              {vols.map((v, i) => (
-                <button
-                  key={v.label}
-                  aria-pressed={i === sel}
-                  aria-label={`Semana del ${v.label}: ${v.tonnes.toLocaleString("es-ES")} toneladas`}
-                  onClick={() => setSel(i)}
-                >
-                  <span style={{ height: `${Math.max(2, (v.tonnes / max) * 100)}%` }} />
-                </button>
-              ))}
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--muted)" }}>
-              <span>{vols[0].label}</span><span>Esta semana</span>
-            </div>
-          </div>
-          {data.lifts.length > 0 && (
-            <>
-              <div className="list">
-                {data.lifts.map((l) => (
-                  <div className="row" key={l.name} style={{ padding: "12px 0" }}>
-                    <div className="grow" style={{ gap: 2 }}>
-                      <span style={{ fontSize: 15, fontWeight: 500 }}>{l.name}</span>
-                      <span className="small muted">{l.best}</span>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
-                      <span style={{ fontSize: 15, fontWeight: 600 }}>{l.e1rm}</span>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: l.up === null ? "var(--muted)" : l.up ? "var(--good)" : "var(--warn)" }}>{l.trend}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <span className="footnote">1RM estimado a partir de tus series en Hevy</span>
-            </>
-          )}
-        </section>
-      )}
-
-      {/* Entrenador */}
-      {tips && tips.push.length + tips.pull.length + tips.general.length > 0 && (
-        <section className="section" aria-labelledby="h-coach">
-          <h2 id="h-coach" className="section-title">Tu entrenador</h2>
-          {([
-            ["push", "Push", tips.push, <PushIcon key="i" size={18} />, "var(--accent-text)"],
-            ["pull", "Pull", tips.pull, <PullIcon key="i" size={18} />, "var(--google)"],
-            ["general", "General", tips.general, <SparkIcon key="i" size={18} />, "var(--good)"],
-          ] as const).map(([key, label, list, icon, color]) =>
-            list.length === 0 ? null : (
-              <div key={key} className="coach-group">
-                <div className="coach-head" style={{ color }}>
-                  <span className="tip-icon" style={{ color }}>{icon}</span>
-                  <span className="label-caps" style={{ color }}>{label}</span>
-                </div>
-                {list.map((t) => (
-                  <div className="tip" key={t.title} style={{ flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontSize: 16, fontWeight: 600 }}>{t.title}</span>
-                    <span className="tip-body">{t.body}</span>
-                  </div>
-                ))}
-              </div>
-            ),
-          )}
-          {data?.lastWorkout && <span className="footnote">Análisis tras tu entreno del {data.lastWorkout.date}</span>}
-        </section>
-      )}
-    </main>
   );
 }

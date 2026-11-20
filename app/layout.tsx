@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import RegisterSW from "@/components/RegisterSW";
+import Splash from "@/components/Splash";
 
 export const metadata: Metadata = {
   title: "Panel de Vida",
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body>
+        <Splash />
         {children}
         <RegisterSW />
       </body>

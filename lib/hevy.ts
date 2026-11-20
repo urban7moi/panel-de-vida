@@ -75,12 +75,26 @@ export async function getRoutines(): Promise<HevyRoutine[]> {
 /** Entrenos de los últimos `days` días, del más reciente al más antiguo. */
 export async function getRecentWorkouts(days = 90): Promise<HevyWorkout[]> {
   const since = Date.now() - days * 24 * 3600_000;
-  const out: HevyWorkout[] = [];
-  for (let page = 1; page <= 15; page++) {
-    const r = await hevyGet<{ page_count: number; workouts: HevyWorkout[] }>(`/v1/workouts?page=${page}&pageSize=10`);
-    out.push(...r.workouts);
-    const oldest = r.workouts.at(-1);
-    if (page >= r.page_count || !oldest || new Date(oldest.start_time).getTime() < since) break;
+  type Page = { page_count: number; workouts: HevyWorkout[] };
+  const get = (page: number) => hevyGet<Page>(`/v1/workouts?page=${page}&pageSize=10`);
+  const old = (p: Page) => {
+    const last = p.workouts.at(-1);
+    return !last || new Date(last.start_time).getTime() < since;
+  };
+
+  // La primera página dice cuántas hay; las siguientes se piden de 4 en 4 en paralelo.
+  const first = await get(1);
+  const out = [...first.workouts];
+  const total = Math.min(first.page_count, 15);
+  let reachedOld = old(first);
+  for (let page = 2; page <= total && !reachedOld; page += 4) {
+    const batch = await Promise.all(
+      Array.from({ length: Math.min(4, total - page + 1) }, (_, i) => get(page + i)),
+    );
+    for (const p of batch) {
+      out.push(...p.workouts);
+      if (old(p)) reachedOld = true;
+    }
   }
   return out
     .filter((w) => new Date(w.start_time).getTime() >= since)
