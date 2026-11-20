@@ -8,8 +8,8 @@ import type { HevyWorkout } from "./hevy";
 import { e1rm } from "./training";
 import { TZ } from "./time";
 
-const Tip = z.object({ title: z.string(), body: z.string() });
-const Coach = z.object({ push: z.array(Tip), pull: z.array(Tip), general: z.array(Tip) });
+const Tip = z.object({ title: z.string(), action: z.string(), body: z.string() });
+const Coach = z.object({ push: Tip.nullable(), pull: Tip.nullable(), general: Tip.nullable() });
 export type CoachTip = z.infer<typeof Tip>;
 export type CoachReport = z.infer<typeof Coach>;
 
@@ -17,17 +17,18 @@ const SYSTEM = `Eres el entrenador personal de un hombre de 78 kg que busca reco
 Su semana: lunes Push, martes Pull, miércoles rehabilitación de rodilla, jueves Push, viernes Pull.
 Está recién operado de rodilla: NO le propongas ejercicios ni cargas de pierna; para la rodilla limítate a recordarle que siga las pautas de su fisioterapeuta.
 
-Analiza sus últimos entrenos y devuelve recomendaciones concretas y accionables, agrupadas así:
-- "push": 1-3 recomendaciones sobre sus sesiones de empuje (pecho, hombro, tríceps).
-- "pull": 1-3 recomendaciones sobre sus sesiones de tirón (espalda, bíceps).
-- "general": 1-3 recomendaciones generales (equilibrio empuje/tirón por series, volumen, descansos, recuperación).
-Pon solo las que estén justificadas por los datos; si un grupo no tiene datos, devuélvelo vacío.
+Analiza sus últimos entrenos y devuelve SOLO la recomendación más importante de cada grupo:
+- "push": la más importante de sus sesiones de empuje (pecho, hombro, tríceps).
+- "pull": la más importante de sus sesiones de tirón (espalda, bíceps).
+- "general": la más importante en general (equilibrio empuje/tirón, volumen, descanso).
+Si un grupo no tiene datos, devuélvelo como null.
 
-Cada recomendación:
-- title: el ejercicio o tema y la acción, máximo 7 palabras (p. ej. "Press banca: cambia de variante").
-- body: 2-3 frases. Primero lo que ves en sus datos con números (kg × reps, series, semanas). Después qué hacer exactamente: ejercicio, series × repeticiones, kilos concretos y durante cuánto tiempo, y cuándo volver a probar la marca.
-- Da siempre los kilos exactos, nunca porcentajes: si propones bajar peso, calcula y di el peso nuevo redondeado a 2,5 kg en barra o al par de mancuernas más cercano (p. ej. "baja de 70 kg a 62,5 kg").
-- Nada de elogios ni frases genéricas ("mantienes una buena base de fuerza", "sigue así"): si algo va bien, di qué hacer para seguir progresando.
+Cada recomendación, muy corta y fácil de leer de un vistazo:
+- title: ejercicio + acción, máximo 5 palabras (p. ej. "Press banca: cambia de variante").
+- action: la instrucción concreta con números, máximo 8 palabras (p. ej. "4 × 8 a 62,5 kg · 2 semanas").
+- body: máximo 2 frases cortas (25 palabras en total): qué ves en sus datos y para qué sirve el cambio. Lenguaje sencillo, sin tecnicismos.
+- Kilos exactos, nunca porcentajes: si propones bajar peso, di el peso nuevo redondeado a 2,5 kg en barra o al par de mancuernas más cercano.
+- Nada de elogios ni frases genéricas.
 - Español de España, tono directo y motivador. Sin emojis.`;
 
 function summarize(workouts: HevyWorkout[]) {
@@ -56,7 +57,7 @@ async function generate(workouts: HevyWorkout[]): Promise<CoachReport> {
   });
   const r = res.output_parsed;
   if (!r) throw new Error("Respuesta vacía del entrenador");
-  return { push: r.push.slice(0, 3), pull: r.pull.slice(0, 3), general: r.general.slice(0, 3) };
+  return r;
 }
 
 /** Informe del entrenador para el estado actual. Devuelve null si no hay clave de OpenAI o falla. */
@@ -64,7 +65,7 @@ export async function coachTips(workouts: HevyWorkout[]): Promise<CoachReport | 
   if (!process.env.OPENAI_API_KEY || workouts.length === 0) return null;
   const key = workouts[0].id;
   try {
-    return await unstable_cache(() => generate(workouts), ["coach-report-v3", key], { revalidate: 60 * 60 * 24 * 7 })();
+    return await unstable_cache(() => generate(workouts), ["coach-report-v4", key], { revalidate: 60 * 60 * 24 * 7 })();
   } catch (err) {
     console.error("Coach", err);
     return null;
