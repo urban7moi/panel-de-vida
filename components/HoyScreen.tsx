@@ -1,21 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckIcon, SunIcon, CalendarIcon } from "./icons";
+import { CheckIcon, SunIcon } from "./icons";
 import { mails } from "@/lib/mock";
 import { useStored } from "@/lib/useStored";
-
-type CalEvent = {
-  id: string;
-  title: string;
-  start: string;
-  end: string;
-  allDay: boolean;
-  meta: string;
-  source: "apple" | "panel";
-  stars?: number;
-};
-type CalState = { status: "cargando" | "ok" | "error" | "sin-configurar"; events: CalEvent[] };
 
 type Task = {
   id: string;
@@ -23,15 +11,25 @@ type Task = {
   time: string; // "HH:MM" o ""
   stars: number; // 1-5
   done: boolean;
-  uid?: string; // evento en el Calendario de Apple
-  cal?: "ok" | "error" | "guardando";
+};
+
+type AgendaItem =
+  | { kind: "workout"; time: string; title: string; detail: string }
+  | { kind: "task"; time: string; task: Task };
+
+/** Entrenos de la semana, normalmente a las 12:00. */
+const WORKOUT_TIME = "12:00";
+const WORKOUTS: Record<number, { title: string; detail: string }> = {
+  1: { title: "Entreno · Push", detail: "Pecho, hombro y tríceps" },
+  2: { title: "Entreno · Pull", detail: "Espalda y bíceps" },
+  3: { title: "Rehabilitación de rodilla", detail: "Ejercicios del fisio" },
+  4: { title: "Entreno · Push", detail: "Pecho, hombro y tríceps" },
+  5: { title: "Entreno · Pull", detail: "Espalda y bíceps" },
 };
 
 const DOW = ["L", "M", "X", "J", "V", "S", "D"];
 const TZ = "Europe/Madrid";
 const dateKey = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(d);
-const hhmm = (iso: string) =>
-  new Intl.DateTimeFormat("es-ES", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso));
 
 /** Por hora (las que no tienen hora, al final) y, a igual hora, las más importantes primero. */
 function sortTasks(tasks: Task[]) {
@@ -71,74 +69,47 @@ export default function HoyScreen() {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const activeDay = selectedDay ?? today;
 
-  // --- Calendario de Apple ---
-  const [cal, setCal] = useState<CalState>({ status: "cargando", events: [] });
-  const [calReload, setCalReload] = useState(0);
-  useEffect(() => {
-    if (!activeDay) return;
-    let cancelled = false;
-    setCal((c) => ({ status: "cargando", events: c.events }));
-    fetch(`/api/calendar?date=${activeDay}`)
-      .then((r) => r.json())
-      .then((j: CalState) => !cancelled && setCal({ status: j.status ?? "error", events: j.events ?? [] }))
-      .catch(() => !cancelled && setCal({ status: "error", events: [] }));
-    return () => {
-      cancelled = true;
-    };
-  }, [activeDay, calReload]);
-
-  // --- Tareas (se guardan en este iPhone; las que tienen hora, también en tu calendario) ---
-  const [tasks, setTasks] = useStored<Task[]>(`tareas-v2-${today ?? "hoy"}`, []);
-  const sorted = sortTasks(tasks);
-  const doneCount = tasks.filter((t) => t.done).length;
-  const important = tasks.filter((t) => !t.done && t.stars >= 4).length;
+  // --- Tareas: se guardan por día en este iPhone ---
+  const [allTasks, setAllTasks] = useStored<Record<string, Task[]>>("tareas-v3", {});
+  const dayTasks = (activeDay && allTasks[activeDay]) || [];
+  const setDayTasks = (fn: (ts: Task[]) => Task[]) =>
+    activeDay && setAllTasks((all) => ({ ...all, [activeDay]: fn(all[activeDay] ?? []) }));
+  const sorted = sortTasks(dayTasks);
+  const doneCount = dayTasks.filter((t) => t.done).length;
+  const important = dayTasks.filter((t) => !t.done && t.stars >= 4).length;
 
   const [sheet, setSheet] = useState(false);
-  const [form, setForm] = useState({ title: "", time: "", stars: 3, toCal: true });
+  const [form, setForm] = useState({ title: "", time: "", stars: 3 });
 
-  async function addTask(e: React.FormEvent) {
+  function addTask(e: React.FormEvent) {
     e.preventDefault();
     const title = form.title.trim();
-    if (!title || !today) return;
-    const id = crypto.randomUUID();
-    const sendToCal = !!form.time && form.toCal && cal.status !== "sin-configurar";
-    const task: Task = { id, title, time: form.time, stars: form.stars, done: false, cal: sendToCal ? "guardando" : undefined };
-    setTasks((ts) => [...ts, task]);
-    setForm({ title: "", time: "", stars: 3, toCal: true });
+    if (!title) return;
+    setDayTasks((ts) => [...ts, { id: crypto.randomUUID(), title, time: form.time, stars: form.stars, done: false }]);
+    setForm({ title: "", time: "", stars: 3 });
     setSheet(false);
-    if (!sendToCal) return;
-    try {
-      const res = await fetch("/api/tasks/event", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, date: today, time: task.time, stars: task.stars }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error);
-      setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, uid: j.uid, cal: "ok" } : t)));
-      if (activeDay === today) setCalReload((n) => n + 1);
-    } catch {
-      setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, cal: "error" } : t)));
-    }
   }
+  const toggleTask = (id: string) => setDayTasks((ts) => ts.map((x) => (x.id === id ? { ...x, done: !x.done } : x)));
+  const removeTask = (id: string) => setDayTasks((ts) => ts.filter((x) => x.id !== id));
 
-  async function removeTask(t: Task) {
-    setTasks((ts) => ts.filter((x) => x.id !== t.id));
-    if (t.uid) {
-      await fetch(`/api/tasks/event?uid=${encodeURIComponent(t.uid)}`, { method: "DELETE" }).catch(() => {});
-      setCalReload((n) => n + 1);
-    }
-  }
+  // --- Agenda del día: entreno + tareas, por hora ---
+  const activeDate = week.find((d) => d.key === activeDay)?.date ?? now;
+  const workout = activeDate ? WORKOUTS[activeDate.getDay()] : undefined;
+  const agenda: AgendaItem[] = [
+    ...(workout ? [{ kind: "workout" as const, time: WORKOUT_TIME, ...workout }] : []),
+    ...sorted.map((task) => ({ kind: "task" as const, time: task.time, task })),
+  ].sort((a, b) => (a.time && b.time ? a.time.localeCompare(b.time) : a.time ? -1 : b.time ? 1 : 0));
 
   // --- Emails (aún de ejemplo) ---
   const [mailTab, setMailTab] = useState<"imp" | "all">("imp");
   const visibleMails = mailTab === "imp" ? mails.filter((m) => m.important) : mails;
 
   // --- Resumen ---
-  const todayEvents = activeDay === today ? cal.events : [];
+  const isToday = activeDay === today;
   const nextTask = sorted.find((t) => !t.done && t.time);
   const greeting = !now ? "Hola" : now.getHours() < 13 ? "Buenos días" : now.getHours() < 21 ? "Buenas tardes" : "Buenas noches";
   const dateLabel = now ? now.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" }) : "";
+  const dayName = activeDate ? activeDate.toLocaleDateString("es-ES", { weekday: "long", day: "numeric" }) : "";
 
   return (
     <main className="screen">
@@ -153,19 +124,19 @@ export default function HoyScreen() {
       <section className="card" aria-labelledby="h-resumen">
         <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--accent)" }}>
           <SunIcon size={18} />
-          <h2 id="h-resumen" className="label-caps">Resumen del día</h2>
+          <h2 id="h-resumen" className="label-caps">{isToday ? "Resumen de hoy" : `Resumen del ${dayName}`}</h2>
         </div>
         <p style={{ margin: 0, fontSize: 17, lineHeight: 1.5 }}>
-          {cal.status === "ok" && todayEvents.length > 0 ? (
-            <>Tienes <strong>{todayEvents.length} {todayEvents.length === 1 ? "evento" : "eventos"}</strong>, el primero a las {todayEvents[0].allDay ? "todo el día" : hhmm(todayEvents[0].start)}. </>
-          ) : cal.status === "ok" ? (
-            <>No tienes eventos en el calendario. </>
-          ) : null}
-          {tasks.length === 0 ? (
-            <>Aún no has añadido tareas para hoy.</>
+          {workout ? (
+            <>{isToday ? "Hoy" : `El ${dayName}`} toca <strong>{workout.title.replace("Entreno · ", "")}</strong> a las {WORKOUT_TIME}. </>
+          ) : (
+            <>{isToday ? "Hoy" : `El ${dayName}`} es día de descanso. </>
+          )}
+          {dayTasks.length === 0 ? (
+            <>No hay tareas apuntadas.</>
           ) : (
             <>
-              Te quedan <strong>{tasks.length - doneCount} {tasks.length - doneCount === 1 ? "tarea" : "tareas"}</strong>
+              Quedan <strong>{dayTasks.length - doneCount} {dayTasks.length - doneCount === 1 ? "tarea" : "tareas"}</strong>
               {important > 0 && <>, {important} muy {important === 1 ? "importante" : "importantes"}</>}.
               {nextTask && <> La próxima: {nextTask.title} a las {nextTask.time}.</>}
             </>
@@ -173,11 +144,11 @@ export default function HoyScreen() {
         </p>
         <div className="tiles">
           <div className="tile">
-            <span className="tile-value">{cal.status === "ok" ? todayEvents.length : "–"}</span>
-            <span className="tile-label">Eventos</span>
+            <span className="tile-value">{agenda.filter((i) => i.time).length}</span>
+            <span className="tile-label">En la agenda</span>
           </div>
           <div className="tile">
-            <span className="tile-value">{tasks.length - doneCount}</span>
+            <span className="tile-value">{dayTasks.length - doneCount}</span>
             <span className="tile-label">Tareas pend.</span>
           </div>
           <div className="tile">
@@ -187,57 +158,13 @@ export default function HoyScreen() {
         </div>
       </section>
 
-      {/* Tareas */}
-      <section className="section" aria-labelledby="h-tareas">
-        <div className="section-head">
-          <h2 id="h-tareas" className="section-title">Tareas de hoy</h2>
-          <span className="section-meta">{doneCount} de {tasks.length}</span>
-        </div>
-
-        {sorted.length > 0 && (
-          <div className="list">
-            {sorted.map((t) => (
-              <div className={`task task-row imp-${t.stars}`} key={t.id}>
-                <label className="task-check">
-                  <input
-                    type="checkbox"
-                    checked={t.done}
-                    onChange={() => setTasks((ts) => ts.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)))}
-                    aria-label={`Hecha: ${t.title}`}
-                  />
-                  <span className="check" aria-hidden="true">{t.done && <CheckIcon size={14} />}</span>
-                </label>
-                <span className="task-time">{t.time || "—"}</span>
-                <span className="grow" style={{ gap: 4 }}>
-                  <span className={t.done ? "task-title done" : "task-title"}>{t.title}</span>
-                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <Stars n={t.stars} />
-                    {t.cal === "ok" && (
-                      <span className="tiny muted" style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <CalendarIcon size={12} strokeWidth={2} />En tu calendario
-                      </span>
-                    )}
-                    {t.cal === "guardando" && <span className="tiny muted">Añadiendo al calendario…</span>}
-                    {t.cal === "error" && <span className="tiny" style={{ color: "var(--accent-text)" }}>No se pudo añadir al calendario</span>}
-                  </span>
-                </span>
-                <button type="button" className="icon-btn" aria-label={`Borrar ${t.title}`} onClick={() => removeTask(t)}>×</button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <button type="button" className="add-btn" onClick={() => setSheet(true)}>
-          <span className="add-plus" aria-hidden="true">+</span>
-          Añadir tarea
-        </button>
-      </section>
-
-      {/* Calendario */}
+      {/* Calendario: agenda del día con el entreno y las tareas */}
       <section className="section" aria-labelledby="h-cal">
         <div className="section-head">
           <h2 id="h-cal" className="section-title">Calendario</h2>
-          {cal.status === "cargando" && <span className="small muted">Cargando…</span>}
+          {!isToday && today && (
+            <button type="button" className="link-btn" onClick={() => setSelectedDay(today)}>Volver a hoy</button>
+          )}
         </div>
         <div className="week">
           {week.map((d) => (
@@ -250,44 +177,84 @@ export default function HoyScreen() {
             >
               <span className="day-dow">{d.dow}</span>
               <span className="day-num">{d.date.getDate()}</span>
+              {d.key !== activeDay && (allTasks[d.key]?.length ?? 0) > 0 && <span className="day-dot" aria-hidden="true" />}
             </button>
           ))}
         </div>
-
-        {cal.status === "sin-configurar" ? (
-          <div className="card">
-            <h3 className="label-caps" style={{ margin: 0 }}>Conecta tu Calendario de Apple</h3>
-            <p className="small muted" style={{ margin: 0, lineHeight: 1.5 }}>
-              Añade en Vercel ICLOUD_USERNAME (tu Apple ID) e ICLOUD_APP_PASSWORD (una contraseña de app) y vuelve a desplegar.
-            </p>
-          </div>
-        ) : cal.status === "error" ? (
-          <div className="card">
-            <p className="error" role="alert" style={{ margin: 0 }}>No se pudo leer tu Calendario de Apple. Revisa la contraseña de app.</p>
-          </div>
-        ) : cal.events.length === 0 && cal.status === "ok" ? (
-          <div className="card"><span className="small muted">Nada en el calendario este día.</span></div>
+        {agenda.length === 0 ? (
+          <div className="card"><span className="small muted">Día libre: sin entreno ni tareas.</span></div>
         ) : (
-          <div className="list" style={{ opacity: cal.status === "cargando" ? 0.6 : 1 }}>
-            {cal.events.map((e) => (
-              <div className="row" key={e.id}>
-                <div className="time-col">
-                  <span style={{ fontSize: 15, fontWeight: 600 }}>{e.allDay ? "Todo" : hhmm(e.start)}</span>
-                  <span className="tiny muted">{e.allDay ? "el día" : hhmm(e.end)}</span>
+          <div className="list">
+            {agenda.map((item) =>
+              item.kind === "workout" ? (
+                <div className="row" key="workout">
+                  <div className="time-col">
+                    <span style={{ fontSize: 15, fontWeight: 600 }}>{item.time}</span>
+                  </div>
+                  <div className="source-bar" style={{ background: "var(--google)" }} />
+                  <div className="grow">
+                    <span style={{ fontSize: 16, fontWeight: 600 }}>{item.title}</span>
+                    <span className="small muted">{item.detail}</span>
+                  </div>
                 </div>
-                <div className="source-bar" style={{ background: e.source === "panel" ? "var(--accent)" : "var(--apple)" }} />
-                <div className="grow">
-                  <span style={{ fontSize: 16, fontWeight: 500 }}>{e.title}</span>
-                  {e.source === "panel" && e.stars ? <Stars n={e.stars} size={12} /> : <span className="small muted">{e.meta}</span>}
+              ) : (
+                <div className="row" key={item.task.id}>
+                  <div className="time-col">
+                    <span style={{ fontSize: 15, fontWeight: 600 }}>{item.time || "—"}</span>
+                  </div>
+                  <div className="source-bar" style={{ background: "var(--accent)", opacity: item.task.done ? 0.35 : 1 }} />
+                  <div className="grow">
+                    <span className={item.task.done ? "task-title done" : "task-title"} style={{ fontSize: 16 }}>{item.task.title}</span>
+                    <Stars n={item.task.stars} size={12} />
+                  </div>
                 </div>
+              ),
+            )}
+          </div>
+        )}
+        <div className="legend">
+          <span><i className="dot" style={{ background: "var(--google)" }} />Entreno</span>
+          <span><i className="dot" style={{ background: "var(--accent)" }} />Tareas</span>
+        </div>
+      </section>
+
+      {/* Tareas */}
+      <section className="section" aria-labelledby="h-tareas">
+        <div className="section-head">
+          <h2 id="h-tareas" className="section-title">{isToday ? "Tareas de hoy" : `Tareas del ${dayName}`}</h2>
+          <span className="section-meta">{doneCount} de {dayTasks.length}</span>
+        </div>
+
+        {sorted.length > 0 && (
+          <div className="list">
+            {sorted.map((t) => (
+              <div className={`task task-row imp-${t.stars}`} key={t.id}>
+                <label className="task-check">
+                  <input
+                    type="checkbox"
+                    checked={t.done}
+                    onChange={() => toggleTask(t.id)}
+                    aria-label={`Hecha: ${t.title}`}
+                  />
+                  <span className="check" aria-hidden="true">{t.done && <CheckIcon size={14} />}</span>
+                </label>
+                <span className="task-time">{t.time || "—"}</span>
+                <span className="grow" style={{ gap: 4 }}>
+                  <span className={t.done ? "task-title done" : "task-title"}>{t.title}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <Stars n={t.stars} />
+                  </span>
+                </span>
+                <button type="button" className="icon-btn" aria-label={`Borrar ${t.title}`} onClick={() => removeTask(t.id)}>×</button>
               </div>
             ))}
           </div>
         )}
-        <div className="legend">
-          <span><i className="dot" style={{ background: "var(--apple)" }} />Calendario de Apple</span>
-          <span><i className="dot" style={{ background: "var(--accent)" }} />Tareas del panel</span>
-        </div>
+
+        <button type="button" className="add-btn" onClick={() => setSheet(true)}>
+          <span className="add-plus" aria-hidden="true">+</span>
+          Añadir tarea
+        </button>
       </section>
 
       {/* Emails */}
@@ -352,12 +319,6 @@ export default function HoyScreen() {
                 ))}
               </div>
             </fieldset>
-            {form.time && cal.status !== "sin-configurar" && (
-              <label className="toggle-row">
-                <input type="checkbox" checked={form.toCal} onChange={(e) => setForm({ ...form, toCal: e.target.checked })} />
-                Añadir también a mi Calendario de Apple
-              </label>
-            )}
             <div style={{ display: "flex", gap: 10 }}>
               <button type="button" className="btn-secondary" onClick={() => setSheet(false)}>Cancelar</button>
               <button type="submit" className="btn-primary" disabled={!form.title.trim()}>Guardar</button>

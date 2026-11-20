@@ -288,3 +288,6 @@ button, input { font-family: inherit; }
 .sheet .btn-primary { flex: 1; }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes sheet-up { from { transform: translateY(100%); } }
+.day { position: relative; }
+.day-dot { position: absolute; bottom: 6px; width: 5px; height: 5px; border-radius: 3px; background: var(--accent); }
+.link-btn { background: none; border: none; color: var(--accent-text); font-size: 15px; font-weight: 500; cursor: pointer; min-height: 44px; padding: 0; }
