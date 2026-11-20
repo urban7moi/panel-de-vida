@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BalanceIcon, CameraIcon, CheckIcon, FlatIcon, InfoIcon, PlayIcon } from "./icons";
 import { coachTips, firstWeek, lifts, macroGoals, weeklyVolume, workout } from "@/lib/mock";
 import { useStored } from "@/lib/useStored";
@@ -31,6 +31,16 @@ export default function EntrenoScreen() {
   const [analyzing, setAnalyzing] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [step, setStep] = useState(0);
+  const steps = ["Identificando los alimentos…", "Calculando la ración…", "Estimando calorías y macros…"];
+
+  useEffect(() => {
+    if (!analyzing) return;
+    setStep(0);
+    const t = setInterval(() => setStep((s) => Math.min(s + 1, steps.length - 1)), 2200);
+    return () => clearInterval(t);
+  }, [analyzing, steps.length]);
 
   const eaten = meals.reduce(
     (a, m) => ({ p: a.p + m.p, c: a.c + m.c, g: a.g + m.g }),
@@ -45,6 +55,10 @@ export default function EntrenoScreen() {
     setAnalyzing(true);
     setPhotoError("");
     setEstimate(null);
+    setPreview((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return URL.createObjectURL(file);
+    });
     try {
       const body = new FormData();
       body.append("image", await shrinkImage(file), "comida.jpg");
@@ -76,6 +90,10 @@ export default function EntrenoScreen() {
     setMeals([...meals, { name, p, c, g, kcal: formKcal }]);
     setForm(emptyForm);
     setEstimate(null);
+    setPreview((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return null;
+    });
   }
 
   const [sel, setSel] = useState(weeklyVolume.length - 1);
@@ -184,18 +202,33 @@ export default function EntrenoScreen() {
                 if (f) analyzePhoto(f);
               }}
             />
-            <button type="button" className="scan" onClick={() => fileRef.current?.click()} disabled={analyzing} style={{ minHeight: 56, padding: "8px 12px" }}>
-              <span className="scan-icon" style={{ width: 36, height: 36 }}><CameraIcon size={18} strokeWidth={2} /></span>
-              <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <span style={{ fontSize: 15, fontWeight: 600 }}>{analyzing ? "Analizando la foto…" : "Foto de la comida"}</span>
-                <span className="tiny muted">La IA estima las calorías y los macros</span>
-              </span>
-            </button>
+            {analyzing ? (
+              <div className="analyzing" role="status" aria-live="polite">
+                {preview && <img src={preview} alt="" className="analyzing-photo" />}
+                <div className="analyzing-overlay">
+                  <span className="spinner" aria-hidden="true" />
+                  <span style={{ fontSize: 17, fontWeight: 600 }}>Analizando tu comida</span>
+                  <span className="small" style={{ color: "#e8e6df" }}>{steps[step]}</span>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="scan" onClick={() => fileRef.current?.click()} style={{ minHeight: 56, padding: "8px 12px" }}>
+                <span className="scan-icon" style={{ width: 36, height: 36 }}><CameraIcon size={18} strokeWidth={2} /></span>
+                <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600 }}>{estimate ? "Hacer otra foto" : "Foto de la comida"}</span>
+                  <span className="tiny muted">La IA estima las calorías y los macros</span>
+                </span>
+              </button>
+            )}
             {photoError && <p className="error" role="alert" style={{ fontSize: 13 }}>{photoError}</p>}
-            {estimate && (
-              <p className="small muted" style={{ margin: 0, lineHeight: 1.45 }}>
-                Estimación (confianza {estimate.confidence}). {estimate.notes} Revisa los números antes de añadir.
-              </p>
+            {estimate && !analyzing && (
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                {preview && <img src={preview} alt="" style={{ width: 56, height: 56, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />}
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                  <span className="chip">Estimación · confianza {estimate.confidence}</span>
+                  <span className="small muted" style={{ lineHeight: 1.45 }}>{estimate.notes}</span>
+                </div>
+              </div>
             )}
 
             <label className="field">Nombre

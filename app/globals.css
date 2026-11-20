@@ -165,3 +165,30 @@ button, input { font-family: inherit; }
 .login { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
 .login form { width: 100%; max-width: 360px; }
 .error { color: var(--accent-text); font-size: 14px; margin: 0; }
+
+/* Análisis de la foto de comida */
+.analyzing { position: relative; min-height: 180px; border-radius: 14px; overflow: hidden; background: var(--card); border: 1px solid var(--line-2); }
+.analyzing-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: blur(2px) brightness(0.45); transform: scale(1.05); }
+.analyzing-overlay {
+  position: relative; min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 20px; text-align: center; color: var(--text);
+}
+.analyzing::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.08) 50%, transparent 70%);
+  background-size: 250% 100%; animation: shimmer 1.6s linear infinite;
+}
+.spinner {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.2); border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+.chip {
+  align-self: flex-start; font-size: 12px; font-weight: 600; color: var(--accent-text);
+  background: rgba(217, 119, 87, 0.14); border-radius: 999px; padding: 4px 10px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner, .analyzing::after { animation-duration: 3s; }
+}
