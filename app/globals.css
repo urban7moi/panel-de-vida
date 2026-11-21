@@ -208,30 +208,37 @@ button, input { font-family: inherit; }
 .dot.pulse { animation: pulse 1s ease-in-out infinite alternate; }
 @keyframes pulse { from { opacity: 0.3; } to { opacity: 1; } }
 
-/* Pantalla de inicio: "m." → "moi." */
+/* Pantalla de inicio: "m." → "moi." (más pequeña y con movimiento suave) */
 .splash {
   position: fixed; inset: 0; z-index: 100;
   display: flex; align-items: center; justify-content: center;
   background: #d97757; color: #fff;
-  animation: splash-out 0.35s ease-in 1.6s forwards;
+  animation: splash-out 0.5s cubic-bezier(0.4, 0, 0.2, 1) 2.45s forwards;
 }
 .splash-word {
   display: inline-flex; align-items: baseline;
-  font-size: clamp(72px, 24vw, 150px); line-height: 1; letter-spacing: -0.02em;
-  animation: splash-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  font-size: clamp(48px, 15vw, 96px); line-height: 1; letter-spacing: -0.02em;
+  animation: splash-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
 }
 .splash-letter {
   display: inline-block; overflow: hidden; max-width: 0; opacity: 0;
-  transform: translateX(-35%);
-  animation: splash-grow 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 0.45s forwards;
+  transform: translateX(-30%);
+  animation: splash-grow 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.65s forwards;
+  will-change: max-width, opacity, transform;
 }
-.splash-letter-2 { animation-delay: 0.6s; }
-@keyframes splash-in { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
-@keyframes splash-grow { to { max-width: 1em; opacity: 1; transform: translateX(0); } }
+.splash-letter-2 { animation-delay: 0.95s; }
+@keyframes splash-in { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+@keyframes splash-grow {
+  0% { max-width: 0; opacity: 0; transform: translateX(-30%); }
+  60% { opacity: 1; }
+  100% { max-width: 1em; opacity: 1; transform: translateX(0); }
+}
 @keyframes splash-out { to { opacity: 0; visibility: hidden; } }
 @media (prefers-reduced-motion: reduce) {
   .splash-word, .splash-letter { animation-duration: 0.01s; animation-delay: 0s; }
 }
+
 .coach-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
 .coach-action {
   align-self: flex-start; font-size: 14px; font-weight: 700; padding: 6px 10px;
@@ -302,3 +309,13 @@ button:active, .tab:active, .add-btn:active, .scan:active { transform: scale(0.9
 }
 .row-btn { width: 100%; border: none; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .list .row-btn + .row, .list .row + .row-btn { border-top: 1px solid var(--line); }
+
+/* Calendario deslizable por semanas */
+.week-scroll {
+  display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 24px) / 7); gap: 4px;
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none; margin: 0 -2px; padding: 0 2px;
+}
+.week-scroll::-webkit-scrollbar { display: none; }
+.week-scroll .day.snap { scroll-snap-align: start; }
+.week-scroll .day[data-today="true"]:not([aria-pressed="true"]) { border-color: var(--accent); }

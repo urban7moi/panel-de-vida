@@ -13,7 +13,7 @@ const brand = Montserrat({ weight: "900", subsets: ["latin"], display: "block" }
 export default function Splash() {
   const [gone, setGone] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setGone(true), 2000);
+    const t = setTimeout(() => setGone(true), 3000);
     return () => clearTimeout(t);
   }, []);
   if (gone) return null;

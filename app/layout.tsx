@@ -16,6 +16,9 @@ export const metadata: Metadata = {
     icon: "/logo-m-64.png",
     apple: "/logo-m-180.png",
   },
+  formatDetection: { telephone: false, email: false, address: false },
+  // iOS: abrir a pantalla completa, sin la barra de Safari, al lanzarla desde el icono.
+  other: { "apple-mobile-web-app-capable": "yes" },
 };
 
 export const viewport: Viewport = {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon, SunIcon } from "./icons";
 import { useStored } from "@/lib/useStored";
 
@@ -57,19 +57,34 @@ export default function HoyScreen() {
   useEffect(() => setNow(new Date()), []);
   const today = now ? dateKey(now) : null;
 
+  // Días del calendario: la semana pasada, esta y las 5 siguientes (se desliza en horizontal, semana a semana).
   const week = useMemo(() => {
     if (!now) return [];
     const monday = new Date(now);
-    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-    return DOW.map((dow, i) => {
+    monday.setHours(12, 0, 0, 0);
+    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) - 7);
+    return Array.from({ length: 7 * 7 }, (_, i) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
-      return { dow, date: d, key: dateKey(d) };
+      return { dow: DOW[i % 7], date: d, key: dateKey(d), monday: i % 7 === 0 };
     });
   }, [now]);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const scrollToDay = useCallback((key: string | null, smooth: boolean) => {
+    const strip = stripRef.current;
+    const el = key ? strip?.querySelector<HTMLElement>(`[data-key="${key}"]`) : null;
+    if (!strip || !el) return;
+    // Lleva a la vista la semana (empezando en lunes) que contiene ese día.
+    const idx = Number(el.dataset.index);
+    const mondayEl = strip.querySelector<HTMLElement>(`[data-index="${idx - (idx % 7)}"]`);
+    strip.scrollTo({ left: (mondayEl ?? el).offsetLeft - strip.offsetLeft, behavior: smooth ? "smooth" : "auto" });
+  }, []);
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const activeDay = selectedDay ?? today;
+  useEffect(() => {
+    if (week.length) scrollToDay(today, false);
+  }, [week, today, scrollToDay]);
 
   // --- Tareas: se guardan por día en este iPhone ---
   const [allTasks, setAllTasks] = useStored<Record<string, Task[]>>("tareas-v3", {});
@@ -211,19 +226,31 @@ export default function HoyScreen() {
         <div className="section-head">
           <h2 id="h-cal" className="section-title">Calendario</h2>
           {!isToday && today && (
-            <button type="button" className="link-btn" onClick={() => setSelectedDay(today)}>Volver a hoy</button>
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => {
+                setSelectedDay(today);
+                scrollToDay(today, true);
+              }}
+            >
+              Volver a hoy
+            </button>
           )}
         </div>
-        <div className="week">
-          {week.map((d) => (
+        <div className="week-scroll" ref={stripRef}>
+          {week.map((d, i) => (
             <button
               key={d.key}
-              className="day"
+              data-key={d.key}
+              data-index={i}
+              data-today={d.key === today}
+              className={d.monday ? "day snap" : "day"}
               aria-pressed={d.key === activeDay}
               aria-label={d.date.toLocaleDateString("es-ES", { weekday: "long", day: "numeric" })}
               onClick={() => setSelectedDay(d.key)}
             >
-              <span className="day-dow">{d.dow}</span>
+              <span className="day-dow">{d.date.getDate() === 1 ? d.date.toLocaleDateString("es-ES", { month: "short" }).replace(".", "") : d.dow}</span>
               <span className="day-num">{d.date.getDate()}</span>
               {d.key !== activeDay && (allTasks[d.key]?.length ?? 0) > 0 && <span className="day-dot" aria-hidden="true" />}
             </button>
