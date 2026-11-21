@@ -1,56 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckIcon, SunIcon } from "./icons";
+import { CalendarIcon, CheckIcon, SunIcon } from "./icons";
+import Stars from "./Stars";
+import CalendarFull from "./CalendarFull";
 import { useStored } from "@/lib/useStored";
-
-type Task = {
-  id: string;
-  title: string;
-  time: string; // "HH:MM" o ""
-  stars: number; // 1-5
-  done: boolean;
-};
+import { agendaFor, dateFromKey, dateKey, DOW, sortTasks, TZ, WORKOUT_TIME, workoutFor, type Task } from "@/lib/agenda";
 
 type Mail = { id: string; from: string; initials: string; subject: string; preview: string; time: string; day: "hoy" | "ayer"; unread: boolean };
 type MailState = { status: "cargando" | "ok" | "error" | "sin-configurar"; mails: Mail[]; unreadTotal?: number; error?: string };
-
-type AgendaItem =
-  | { kind: "workout"; time: string; title: string; detail: string }
-  | { kind: "task"; time: string; task: Task };
-
-/** Entrenos de la semana, normalmente a las 12:00. */
-const WORKOUT_TIME = "12:00";
-const WORKOUTS: Record<number, { title: string; detail: string }> = {
-  1: { title: "Entreno · Push", detail: "Pecho, hombro y tríceps" },
-  2: { title: "Entreno · Pull", detail: "Espalda y bíceps" },
-  3: { title: "Rehabilitación de rodilla", detail: "Ejercicios del fisio" },
-  4: { title: "Entreno · Push", detail: "Pecho, hombro y tríceps" },
-  5: { title: "Entreno · Pull", detail: "Espalda y bíceps" },
-};
-
-const DOW = ["L", "M", "X", "J", "V", "S", "D"];
-const TZ = "Europe/Madrid";
-const dateKey = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(d);
-
-/** Por hora (las que no tienen hora, al final) y, a igual hora, las más importantes primero. */
-function sortTasks(tasks: Task[]) {
-  return [...tasks].sort((a, b) => {
-    if (a.time && b.time && a.time !== b.time) return a.time.localeCompare(b.time);
-    if (!!a.time !== !!b.time) return a.time ? -1 : 1;
-    return b.stars - a.stars;
-  });
-}
-
-function Stars({ n, size = 14 }: { n: number; size?: number }) {
-  return (
-    <span className="stars" role="img" aria-label={`Importancia ${n} de 5`} style={{ fontSize: size }}>
-      {[1, 2, 3, 4, 5].map((i) => (
-        <span key={i} className={i <= n ? "star on" : "star"}>★</span>
-      ))}
-    </span>
-  );
-}
 
 export default function HoyScreen() {
   const [now, setNow] = useState<Date | null>(null);
@@ -89,21 +47,26 @@ export default function HoyScreen() {
   // --- Tareas: se guardan por día en este iPhone ---
   const [allTasks, setAllTasks] = useStored<Record<string, Task[]>>("tareas-v3", {});
   const dayTasks = (activeDay && allTasks[activeDay]) || [];
-  const setDayTasks = (fn: (ts: Task[]) => Task[]) =>
-    activeDay && setAllTasks((all) => ({ ...all, [activeDay]: fn(all[activeDay] ?? []) }));
+  const setTasksOf = (day: string, fn: (ts: Task[]) => Task[]) =>
+    setAllTasks((all) => ({ ...all, [day]: fn(all[day] ?? []) }));
+  const setDayTasks = (fn: (ts: Task[]) => Task[]) => activeDay && setTasksOf(activeDay, fn);
   const sorted = sortTasks(dayTasks);
   const doneCount = dayTasks.filter((t) => t.done).length;
   const important = dayTasks.filter((t) => !t.done && t.stars >= 4).length;
 
   const [sheet, setSheet] = useState(false);
-  const [form, setForm] = useState({ title: "", time: "", stars: 3 });
+  const [form, setForm] = useState({ title: "", time: "", stars: 3, date: "" });
+  function openAdd(date: string, time = "") {
+    setForm({ title: "", time, stars: 3, date });
+    setSheet(true);
+  }
 
   function addTask(e: React.FormEvent) {
     e.preventDefault();
     const title = form.title.trim();
-    if (!title) return;
-    setDayTasks((ts) => [...ts, { id: crypto.randomUUID(), title, time: form.time, stars: form.stars, done: false }]);
-    setForm({ title: "", time: "", stars: 3 });
+    const day = form.date || activeDay;
+    if (!title || !day) return;
+    setTasksOf(day, (ts) => [...ts, { id: crypto.randomUUID(), title, time: form.time, stars: form.stars, done: false }]);
     setSheet(false);
   }
   const toggleTask = (id: string) => setDayTasks((ts) => ts.map((x) => (x.id === id ? { ...x, done: !x.done } : x)));
@@ -111,26 +74,29 @@ export default function HoyScreen() {
 
   // --- Hora del entreno: las 12:00 salvo que la cambies para un día concreto ---
   const [workoutTimes, setWorkoutTimes] = useStored<Record<string, string>>("entreno-horas", {});
-  const workoutTime = (activeDay && workoutTimes[activeDay]) || WORKOUT_TIME;
-  const [timeSheet, setTimeSheet] = useState<string | null>(null);
+  const workoutTimeFor = (key: string) => workoutTimes[key] || WORKOUT_TIME;
+  const workoutTime = activeDay ? workoutTimeFor(activeDay) : WORKOUT_TIME;
+  const [timeSheet, setTimeSheet] = useState<{ date: string; time: string } | null>(null);
   function saveWorkoutTime(time: string | null) {
-    if (!activeDay) return;
+    if (!timeSheet) return;
+    const day = timeSheet.date;
     setWorkoutTimes((all) => {
       const next = { ...all };
-      if (time && time !== WORKOUT_TIME) next[activeDay] = time;
-      else delete next[activeDay];
+      if (time && time !== WORKOUT_TIME) next[day] = time;
+      else delete next[day];
       return next;
     });
     setTimeSheet(null);
   }
+  const editWorkout = (date: string) => setTimeSheet({ date, time: workoutTimeFor(date) });
+
+  // --- Calendario completo (estilo iPhone) ---
+  const [fullCal, setFullCal] = useState(false);
 
   // --- Agenda del día: entreno + tareas, por hora ---
-  const activeDate = week.find((d) => d.key === activeDay)?.date ?? now;
-  const workout = activeDate ? WORKOUTS[activeDate.getDay()] : undefined;
-  const agenda: AgendaItem[] = [
-    ...(workout ? [{ kind: "workout" as const, time: workoutTime, ...workout }] : []),
-    ...sorted.map((task) => ({ kind: "task" as const, time: task.time, task })),
-  ].sort((a, b) => (a.time && b.time ? a.time.localeCompare(b.time) : a.time ? -1 : b.time ? 1 : 0));
+  const activeDate = activeDay ? dateFromKey(activeDay) : now;
+  const workout = activeDay ? workoutFor(activeDay) : undefined;
+  const agenda = activeDay ? agendaFor(activeDay, dayTasks, workoutTime) : [];
 
   // --- Emails ---
   const [mail, setMail] = useState<MailState>({ status: "cargando", mails: [] });
@@ -225,6 +191,7 @@ export default function HoyScreen() {
       <section className="section" aria-labelledby="h-cal">
         <div className="section-head">
           <h2 id="h-cal" className="section-title">Calendario</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           {!isToday && today && (
             <button
               type="button"
@@ -237,6 +204,11 @@ export default function HoyScreen() {
               Volver a hoy
             </button>
           )}
+            <button type="button" className="open-cal" onClick={() => setFullCal(true)} aria-label="Abrir calendario completo">
+              <CalendarIcon size={18} strokeWidth={2} />
+              Abrir
+            </button>
+          </div>
         </div>
         <div className="week-scroll" ref={stripRef}>
           {week.map((d, i) => (
@@ -266,7 +238,7 @@ export default function HoyScreen() {
                   type="button"
                   className="row row-btn"
                   key="workout"
-                  onClick={() => setTimeSheet(workoutTime)}
+                  onClick={() => activeDay && editWorkout(activeDay)}
                   aria-label={`${item.title} a las ${item.time}. Cambiar hora`}
                 >
                   <div className="time-col">
@@ -333,7 +305,7 @@ export default function HoyScreen() {
           </div>
         )}
 
-        <button type="button" className="add-btn" onClick={() => setSheet(true)}>
+        <button type="button" className="add-btn" onClick={() => activeDay && openAdd(activeDay)}>
           <span className="add-plus" aria-hidden="true">+</span>
           Añadir tarea
         </button>
@@ -388,32 +360,51 @@ export default function HoyScreen() {
         )}
       </section>
 
+      {/* Calendario completo */}
+      {fullCal && today && activeDay && (
+        <CalendarFull
+          today={today}
+          selected={activeDay}
+          onSelect={(key) => {
+            setSelectedDay(key);
+            scrollToDay(key, false);
+          }}
+          onClose={() => setFullCal(false)}
+          tasksByDay={allTasks}
+          workoutTimeFor={workoutTimeFor}
+          onAdd={(date, time) => openAdd(date, time)}
+          onEditWorkout={editWorkout}
+        />
+      )}
+
       {/* Hoja para cambiar la hora del entreno */}
-      {timeSheet !== null && workout && (
+      {timeSheet && workoutFor(timeSheet.date) && (
         <div className="sheet-backdrop" onClick={() => setTimeSheet(null)}>
           <form
             className="sheet"
             onClick={(e) => e.stopPropagation()}
             onSubmit={(e) => {
               e.preventDefault();
-              saveWorkoutTime(timeSheet);
+              saveWorkoutTime(timeSheet.time);
             }}
             aria-labelledby="h-hora"
           >
             <div className="sheet-grip" aria-hidden="true" />
             <h2 id="h-hora" style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Hora del entreno</h2>
-            <span className="small muted">{workout.title} · {isToday ? "hoy" : dayName}</span>
+            <span className="small muted">
+              {workoutFor(timeSheet.date)!.title} · {timeSheet.date === today ? "hoy" : dateFromKey(timeSheet.date).toLocaleDateString("es-ES", { weekday: "long", day: "numeric" })}
+            </span>
             <label className="field">Hora
-              <input className="input" type="time" required value={timeSheet} onChange={(e) => setTimeSheet(e.target.value)} />
+              <input className="input" type="time" required value={timeSheet.time} onChange={(e) => setTimeSheet({ ...timeSheet, time: e.target.value })} />
             </label>
-            {workoutTime !== WORKOUT_TIME && (
+            {workoutTimeFor(timeSheet.date) !== WORKOUT_TIME && (
               <button type="button" className="link-btn" style={{ alignSelf: "flex-start" }} onClick={() => saveWorkoutTime(null)}>
                 Volver a las {WORKOUT_TIME}
               </button>
             )}
             <div style={{ display: "flex", gap: 10 }}>
               <button type="button" className="btn-secondary" onClick={() => setTimeSheet(null)}>Cancelar</button>
-              <button type="submit" className="btn-primary" disabled={!timeSheet}>Guardar</button>
+              <button type="submit" className="btn-primary" disabled={!timeSheet.time}>Guardar</button>
             </div>
           </form>
         </div>
@@ -425,6 +416,11 @@ export default function HoyScreen() {
           <form className="sheet" onSubmit={addTask} onClick={(e) => e.stopPropagation()} aria-labelledby="h-nueva">
             <div className="sheet-grip" aria-hidden="true" />
             <h2 id="h-nueva" style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Nueva tarea</h2>
+            {form.date && (
+              <span className="small muted" style={{ marginTop: -8 }}>
+                {form.date === today ? "Hoy" : dateFromKey(form.date).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}
+              </span>
+            )}
             <label className="field">Nombre
               <input
                 className="input"

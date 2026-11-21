@@ -319,3 +319,89 @@ button:active, .tab:active, .add-btn:active, .scan:active { transform: scale(0.9
 .week-scroll::-webkit-scrollbar { display: none; }
 .week-scroll .day.snap { scroll-snap-align: start; }
 .week-scroll .day[data-today="true"]:not([aria-pressed="true"]) { border-color: var(--accent); }
+
+/* Calendario completo (estilo iPhone con el diseño de la app) */
+.open-cal {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px;
+  border-radius: 10px; border: 1px solid var(--line-2); background: var(--card); color: var(--text);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.fullcal {
+  position: fixed; inset: 0; z-index: 40; background: var(--bg); display: flex; flex-direction: column;
+  padding-top: var(--safe-top); animation: sheet-up 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.fullcal-top { max-width: 480px; width: 100%; margin: 0 auto; padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 12px; }
+.fullcal-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.fullcal-title { margin: 0; min-width: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fullcal-year { margin-left: 8px; font-size: 15px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.fullcal-tools { display: flex; align-items: center; gap: 12px; }
+.round-btn {
+  width: 38px; height: 38px; border-radius: 19px; border: 1px solid var(--line-2); background: var(--card);
+  color: var(--text); font-size: 20px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.round-btn.accent { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700; }
+.fullcal-done {
+  min-height: 38px; padding: 0 14px; border-radius: 19px; border: none; background: var(--card-2);
+  color: var(--accent-text); font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.fullcal-body {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  max-width: 480px; width: 100%; margin: 0 auto; padding: 4px 16px calc(var(--safe-bottom) + 24px);
+  display: flex; flex-direction: column; gap: 20px;
+}
+.month-grid {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); row-gap: 4px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 12px 8px;
+}
+.month-dow { text-align: center; font-size: 12px; font-weight: 600; color: var(--muted); padding-bottom: 6px; }
+.month-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 48px; padding: 4px 0;
+  border: none; background: transparent; color: var(--text); cursor: pointer; border-radius: 12px;
+}
+.month-num {
+  width: 34px; height: 34px; border-radius: 17px; display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums;
+}
+.month-cell.out { color: #6b6963; }
+.month-cell.today .month-num { color: var(--accent-text); font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--accent); }
+.month-cell[aria-pressed="true"] .month-num { background: var(--accent); color: var(--on-accent); font-weight: 700; box-shadow: none; }
+.month-dots { display: flex; gap: 3px; height: 5px; }
+.month-dots i { width: 5px; height: 5px; border-radius: 3px; display: block; }
+.fullcal-day { display: flex; flex-direction: column; gap: 12px; }
+.fullcal-daytitle { margin: 0; font-size: 18px; font-weight: 600; }
+
+/* Vista semana */
+.fullcal-week { flex: 1; min-height: 0; display: flex; flex-direction: column; max-width: 480px; width: 100%; margin: 0 auto; padding-bottom: calc(var(--safe-bottom) + 12px); }
+.wk-head { display: grid; grid-template-columns: 40px repeat(7, minmax(0, 1fr)); padding: 0 8px 6px; border-bottom: 1px solid var(--line); }
+.wk-gutter { display: block; }
+.wk-day {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; min-height: 52px;
+  border: none; background: transparent; color: var(--text); cursor: pointer;
+}
+.wk-dow { font-size: 11px; font-weight: 600; color: var(--muted); }
+.wk-num { width: 30px; height: 30px; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; }
+.wk-day.today .wk-num { color: var(--accent-text); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.wk-day[aria-pressed="true"] .wk-num { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.wk-untimed { font-size: 9px; color: var(--accent-text); white-space: nowrap; }
+.wk-grid { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 8px 8px 0; }
+.wk-inner {
+  position: relative; display: grid; grid-template-columns: 40px repeat(7, minmax(0, 1fr));
+  background-image: linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+  background-size: 100% 52px; background-position: 0 0;
+}
+.wk-hours { position: relative; }
+.wk-hours span { position: absolute; left: 0; transform: translateY(-50%); font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wk-hours span:first-child { transform: none; }
+.wk-col { position: relative; border-left: 1px solid var(--line); cursor: pointer; }
+.wk-col.today { background: rgba(217, 119, 87, 0.05); }
+.wk-block {
+  position: absolute; margin-left: 1px; padding: 3px 4px; border: none; border-radius: 6px; overflow: hidden;
+  text-align: left; font-size: 10px; font-weight: 600; line-height: 1.2; cursor: pointer;
+  overflow-wrap: break-word; -webkit-hyphens: auto; hyphens: auto;
+}
+.wk-block.workout { background: rgba(126, 166, 224, 0.22); color: #c4d7f3; border-left: 3px solid var(--google); }
+.wk-block.task { background: rgba(217, 119, 87, 0.22); color: #f2c3b3; border-left: 3px solid var(--accent); }
+.wk-block.done { opacity: 0.45; text-decoration: line-through; }
+.wk-now { position: absolute; left: -3px; right: 0; height: 2px; background: var(--accent); pointer-events: none; }
+.wk-now::before { content: ""; position: absolute; left: -2px; top: -3px; width: 8px; height: 8px; border-radius: 4px; background: var(--accent); }
+.sheet-backdrop { z-index: 50; }
