@@ -9,6 +9,7 @@ export type Settings = {
   kcalTraining: number; // kcal en días de pesas
   kcalRest: number; // kcal en días sin pesas
   kcalAdjust: number; // ajuste por la tendencia del peso (se suma a los dos)
+  kcalAdjustDate?: string; // cuándo se hizo el último ajuste
   schedule: Record<string, DayPlan>; // "0" domingo … "6" sábado
   workoutTime: string; // "12:00"
   waterGlasses: number; // vasos de 250 ml

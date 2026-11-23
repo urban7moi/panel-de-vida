@@ -1,6 +1,7 @@
 "use client";
 
 import SettingsLink from "./SettingsLink";
+import WeightSection from "./WeightSection";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CameraIcon, InfoIcon } from "./icons";
 import { useStored } from "@/lib/useStored";
@@ -558,6 +559,8 @@ export default function ComidaScreen() {
           </div>
         </div>
       </section>
+
+      {today && <WeightSection today={today} />}
 
       {/* Semana */}
       <section className="section" aria-labelledby="h-semana">

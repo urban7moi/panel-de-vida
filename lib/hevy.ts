@@ -103,3 +103,15 @@ export async function getRecentWorkouts(days = 90): Promise<HevyWorkout[]> {
     .filter((w) => new Date(w.start_time).getTime() >= since)
     .sort((a, b) => b.start_time.localeCompare(a.start_time));
 }
+
+/** Pesos apuntados en Hevy (Perfil → Medidas), del más reciente al más antiguo. */
+export async function getBodyWeights(maxPages = 4): Promise<{ date: string; kg: number }[]> {
+  type Page = { page_count: number; body_measurements: { date: string; weight_kg: number | null }[] };
+  const out: { date: string; kg: number }[] = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const r = await hevyGet<Page>(`/v1/body_measurements?page=${page}&pageSize=10`, true);
+    for (const m of r.body_measurements) if (m.weight_kg) out.push({ date: m.date.slice(0, 10), kg: m.weight_kg });
+    if (page >= r.page_count) break;
+  }
+  return out.sort((a, b) => b.date.localeCompare(a.date));
+}
