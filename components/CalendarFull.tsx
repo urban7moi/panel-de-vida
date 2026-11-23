@@ -15,6 +15,7 @@ import {
   type Task,
 } from "@/lib/agenda";
 import type { Settings } from "@/lib/settings";
+import type { WorkoutDay } from "@/lib/training";
 
 type Props = {
   today: string;
@@ -22,6 +23,7 @@ type Props = {
   onSelect: (key: string) => void;
   onClose: () => void;
   getTasks: (key: string) => Task[];
+  doneWorkouts: Record<string, WorkoutDay>;
   settings: Settings;
   workoutTimeFor: (key: string) => string;
   onAdd: (date: string, time: string) => void;
@@ -33,7 +35,7 @@ const FIRST_HOUR = 6;
 const LAST_HOUR = 24;
 
 /** Calendario a pantalla completa, al estilo del iPhone: vista Mes y vista Semana. */
-export default function CalendarFull({ today, selected, onSelect, onClose, getTasks, settings, workoutTimeFor, onAdd, onEditWorkout }: Props) {
+export default function CalendarFull({ today, selected, onSelect, onClose, getTasks, doneWorkouts, settings, workoutTimeFor, onAdd, onEditWorkout }: Props) {
   const [view, setView] = useState<"mes" | "semana">("mes");
   const [month, setMonth] = useState(() => selected.slice(0, 7)); // "2026-11"
   const [weekStart, setWeekStart] = useState(() => mondayOf(selected));
@@ -146,7 +148,7 @@ export default function CalendarFull({ today, selected, onSelect, onClose, getTa
                 >
                   <span className="month-num">{d.getDate()}</span>
                   <span className="month-dots" aria-hidden="true">
-                    {workoutFor(key, settings) && <i style={{ background: "var(--google)" }} />}
+                    {doneWorkouts[key] ? <i style={{ background: "var(--good)" }} /> : workoutFor(key, settings) && <i style={{ background: "var(--google)" }} />}
                     {hasTasks && <i style={{ background: "var(--accent)" }} />}
                   </span>
                 </button>
@@ -164,10 +166,14 @@ export default function CalendarFull({ today, selected, onSelect, onClose, getTa
                   item.kind === "workout" ? (
                     <button type="button" className="row row-btn" key="workout" onClick={() => onEditWorkout(selected)}>
                       <div className="time-col"><span style={{ fontSize: 15, fontWeight: 600 }}>{item.time}</span></div>
-                      <div className="source-bar" style={{ background: "var(--google)" }} />
+                      <div className="source-bar" style={{ background: doneWorkouts[selected] ? "var(--good)" : "var(--google)" }} />
                       <div className="grow">
                         <span style={{ fontSize: 16, fontWeight: 600 }}>{item.title}</span>
-                        <span className="small muted">{item.detail}</span>
+                        {doneWorkouts[selected] ? (
+                          <span className="small" style={{ color: "var(--good)" }}>✓ Hecho · {doneWorkouts[selected].minutes} min · {doneWorkouts[selected].tonnes.toLocaleString("es-ES")} t</span>
+                        ) : (
+                          <span className="small muted">{item.detail}</span>
+                        )}
                       </div>
                       <span className="tiny" style={{ color: "var(--google)", flexShrink: 0 }}>Cambiar hora</span>
                     </button>
@@ -229,6 +235,7 @@ export default function CalendarFull({ today, selected, onSelect, onClose, getTa
                   tasks={getTasks(key)}
                   workoutTime={workoutTimeFor(key)}
                   settings={settings}
+                  done={!!doneWorkouts[key]}
                   onEmpty={(time) => {
                     select(key);
                     onAdd(key, time);
@@ -298,6 +305,7 @@ function DayColumn({
   tasks,
   workoutTime,
   settings,
+  done,
   onEmpty,
   onWorkout,
   onTask,
@@ -308,13 +316,14 @@ function DayColumn({
   tasks: Task[];
   workoutTime: string;
   settings: Settings;
+  done: boolean;
   onEmpty: (time: string) => void;
   onWorkout: () => void;
   onTask: () => void;
 }) {
   const workout = workoutFor(dayKey, settings);
   const blocks = layout([
-    ...(workout ? [{ id: "w", start: toMinutes(workoutTime), end: toMinutes(workoutTime) + 60, title: shortWorkout(workout.title), kind: "workout" as const }] : []),
+    ...(workout ? [{ id: "w", start: toMinutes(workoutTime), end: toMinutes(workoutTime) + 60, title: (done ? "✓ " : "") + shortWorkout(workout.title), kind: "workout" as const }] : []),
     ...tasks
       .filter((t) => t.time)
       .map((t) => ({ id: t.id, start: toMinutes(t.time), end: toMinutes(t.time) + 45, title: t.title, kind: "task" as const, done: t.done })),

@@ -243,3 +243,35 @@ export function buildTraining(routines: HevyRoutine[], workouts: HevyWorkout[], 
       : null,
   };
 }
+
+// --- Resumen de entrenos por día (para marcar como hecho en Hoy y en el calendario) ---
+
+export type WorkoutDay = { date: string; title: string; minutes: number; tonnes: number; sets: number; prs: number };
+
+export function workoutDays(workouts: HevyWorkout[]): WorkoutDay[] {
+  const best: Record<string, number> = {};
+  const byDay = new Map<string, WorkoutDay>();
+  for (const w of [...workouts].sort((a, b) => a.start_time.localeCompare(b.start_time))) {
+    let prs = 0;
+    let sets = 0;
+    for (const e of w.exercises) {
+      const work = e.sets.filter(isWorking);
+      sets += work.length;
+      const top = Math.max(0, ...work.map(e1rm));
+      const prev = best[e.exercise_template_id];
+      if (top && prev && top > prev + 0.01) prs++;
+      if (top && (!prev || top > prev)) best[e.exercise_template_id] = top;
+    }
+    const date = madridDateKey(new Date(w.start_time));
+    const minutes = Math.max(0, Math.round((new Date(w.end_time).getTime() - new Date(w.start_time).getTime()) / 60000));
+    const prevDay = byDay.get(date);
+    const tonnes = volumeOf(w) / 1000;
+    byDay.set(
+      date,
+      prevDay
+        ? { date, title: `${prevDay.title} + ${w.title}`, minutes: prevDay.minutes + minutes, tonnes: prevDay.tonnes + tonnes, sets: prevDay.sets + sets, prs: prevDay.prs + prs }
+        : { date, title: w.title, minutes, tonnes, sets, prs },
+    );
+  }
+  return [...byDay.values()].map((d) => ({ ...d, tonnes: Math.round(d.tonnes * 10) / 10 }));
+}

@@ -8,10 +8,12 @@ import CalendarFull from "./CalendarFull";
 import { useStored } from "@/lib/useStored";
 import { addDays, agendaFor, dateFromKey, dateKey, DOW, repeatLabel, sortTasks, tasksOn, TZ, workoutFor, type RecurringTask, type Repeat, type Task } from "@/lib/agenda";
 import { useSettings } from "@/lib/useSettings";
+import { useWorkoutDays } from "@/lib/useWorkoutDays";
 
 
 export default function HoyScreen() {
   const [settings] = useSettings();
+  const doneWorkouts = useWorkoutDays();
   const WORKOUT_TIME = settings.workoutTime;
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => setNow(new Date()), []);
@@ -188,7 +190,12 @@ export default function HoyScreen() {
   // --- Agenda del día: entreno + tareas, por hora ---
   const activeDate = activeDay ? dateFromKey(activeDay) : now;
   const workout = activeDay ? workoutFor(activeDay, settings) : undefined;
+  const doneToday = activeDay ? doneWorkouts[activeDay] : undefined;
   const agenda = activeDay ? agendaFor(activeDay, dayTasks, workoutTime, settings) : [];
+  // Si entrenaste un día que no tocaba, también sale en la agenda.
+  if (doneToday && !workout) agenda.unshift({ kind: "workout", time: workoutTime, title: `Entreno · ${doneToday.title}`, detail: "Entreno extra" });
+  // Si ya está hecho, se muestra lo que hiciste en Hevy.
+  if (doneToday) agenda.forEach((i) => i.kind === "workout" && (i.title = `Entreno · ${doneToday.title}`));
 
   // --- Resumen ---
   const isToday = activeDay === today;
@@ -216,7 +223,9 @@ export default function HoyScreen() {
           <h2 id="h-resumen" className="label-caps">{isToday ? "Resumen de hoy" : `Resumen del ${dayName}`}</h2>
         </div>
         <p style={{ margin: 0, fontSize: 17, lineHeight: 1.5 }}>
-          {workout ? (
+          {doneToday ? (
+            <>{isToday ? "Hoy" : `El ${dayName}`} has entrenado <strong>{doneToday.title}</strong>{doneToday.minutes > 0 ? `: ${doneToday.minutes} min` : ""}{doneToday.prs > 0 ? ` y ${doneToday.prs} ${doneToday.prs === 1 ? "récord" : "récords"}` : ""}. </>
+          ) : workout ? (
             <>{isToday ? "Hoy" : `El ${dayName}`} toca <strong>{workout.title.replace("Entreno · ", "")}</strong> a las {workoutTime}. </>
           ) : (
             <>{isToday ? "Hoy" : `El ${dayName}`} es día de descanso. </>
@@ -312,6 +321,7 @@ export default function HoyScreen() {
               <span className="day-dow">{d.date.getDate() === 1 ? d.date.toLocaleDateString("es-ES", { month: "short" }).replace(".", "") : d.dow}</span>
               <span className="day-num">{d.date.getDate()}</span>
               {d.key !== activeDay && getTasks(d.key).length > 0 && <span className="day-dot" aria-hidden="true" />}
+              {doneWorkouts[d.key] && <span className="day-done" aria-label="Entreno hecho">✓</span>}
             </button>
           ))}
         </div>
@@ -325,18 +335,24 @@ export default function HoyScreen() {
                   type="button"
                   className="row row-btn"
                   key="workout"
-                  onClick={() => activeDay && editWorkout(activeDay)}
-                  aria-label={`${item.title} a las ${item.time}. Cambiar hora`}
+                  onClick={() => activeDay && !doneToday && workout && editWorkout(activeDay)}
+                  aria-label={doneToday ? `${item.title}: hecho` : `${item.title} a las ${item.time}. Cambiar hora`}
                 >
                   <div className="time-col">
                     <span style={{ fontSize: 15, fontWeight: 600 }}>{item.time}</span>
                   </div>
-                  <div className="source-bar" style={{ background: "var(--google)" }} />
+                  <div className="source-bar" style={{ background: doneToday ? "var(--good)" : "var(--google)" }} />
                   <div className="grow">
                     <span style={{ fontSize: 16, fontWeight: 600 }}>{item.title}</span>
-                    <span className="small muted">{item.detail}</span>
+                    {doneToday ? (
+                      <span className="small" style={{ color: "var(--good)" }}>
+                        ✓ Hecho{doneToday.minutes > 0 ? ` · ${doneToday.minutes} min` : ""} · {doneToday.tonnes.toLocaleString("es-ES")} t{doneToday.prs > 0 ? ` · ${doneToday.prs} ${doneToday.prs === 1 ? "récord" : "récords"}` : ""}
+                      </span>
+                    ) : (
+                      <span className="small muted">{item.detail}</span>
+                    )}
                   </div>
-                  <span className="tiny" style={{ color: "var(--google)", flexShrink: 0 }}>Cambiar hora</span>
+                  {!doneToday && <span className="tiny" style={{ color: "var(--google)", flexShrink: 0 }}>Cambiar hora</span>}
                 </button>
               ) : (
                 <button
@@ -416,6 +432,7 @@ export default function HoyScreen() {
           }}
           onClose={() => setFullCal(false)}
           getTasks={getTasks}
+          doneWorkouts={doneWorkouts}
           settings={settings}
           workoutTimeFor={workoutTimeFor}
           onAdd={(date, time) => openAdd(date, time)}
