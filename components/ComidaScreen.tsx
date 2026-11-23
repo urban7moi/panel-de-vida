@@ -2,6 +2,8 @@
 
 import SettingsLink from "./SettingsLink";
 import WeightSection from "./WeightSection";
+import StreakPill from "./StreakPill";
+import { dayStreak } from "@/lib/streaks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CameraIcon, InfoIcon } from "./icons";
 import { useStored } from "@/lib/useStored";
@@ -223,6 +225,16 @@ export default function ComidaScreen() {
   }
   const planStale = !!plan && plan.basedOn !== signature;
 
+  // --- Racha de proteína (90 % del objetivo o más) ---
+  const proteinStreak = today
+    ? dayStreak(today, (day) => {
+        const list = allMeals[day] ?? [];
+        if (!list.length) return day === today ? null : false;
+        const ok = list.reduce((a, m) => a + m.p, 0) >= goalsFor(day).p * 0.9;
+        return day === today && !ok ? null : ok;
+      }, 120)
+    : 0;
+
   // --- Agua ---
   const WATER_GOAL = settings.waterGlasses;
   const glasses = (active && water[active]) || 0;
@@ -304,6 +316,15 @@ export default function ComidaScreen() {
           ))}
         </div>
       </section>
+
+      {active === today && (
+        <StreakPill
+          n={proteinStreak}
+          unit={["día", "días"]}
+          label="seguidos llegando a tu proteína"
+          empty="Llega a tu proteína hoy para empezar una racha."
+        />
+      )}
 
       {/* Tu nutricionista */}
       <section className="section" aria-labelledby="h-nutri">

@@ -10,6 +10,8 @@ import { toMinutes as toMin } from "@/lib/agenda";
 import { addDays, agendaFor, dateFromKey, dateKey, DOW, durationLabel, endOf, plusMinutes, repeatLabel, sortTasks, tasksOn, TZ, workoutFor, type RecurringTask, type Repeat, type Task } from "@/lib/agenda";
 import { useSettings } from "@/lib/useSettings";
 import { useWorkoutDays } from "@/lib/useWorkoutDays";
+import { dayStreak } from "@/lib/streaks";
+import StreakPill from "./StreakPill";
 
 
 export default function HoyScreen() {
@@ -161,6 +163,14 @@ export default function HoyScreen() {
     }
   };
 
+  // --- Racha: días seguidos completando todas las tareas ---
+  const taskStreak = today
+    ? dayStreak(today, (day) => {
+        const ts = getTasks(day);
+        return ts.length ? ts.every((t) => t.done) : null;
+      }, 120)
+    : 0;
+
   // --- Lo que quedó pendiente ayer ---
   const yesterday = today ? addDays(today, -1) : null;
   const leftovers = yesterday ? (allTasks[yesterday] ?? []).filter((t) => !t.done) : [];
@@ -275,6 +285,15 @@ export default function HoyScreen() {
           </div>
         </div>
       </section>
+
+      {isToday && (
+        <StreakPill
+          n={taskStreak}
+          unit={["día", "días"]}
+          label="seguidos completando todas tus tareas"
+          empty="Completa todas las tareas de hoy para empezar una racha."
+        />
+      )}
 
       {isToday && leftovers.length > 0 && (
         <section className="card leftovers" aria-label="Tareas pendientes de ayer">

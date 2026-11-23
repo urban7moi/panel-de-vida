@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { TrainingData } from "@/lib/training";
+import StreakPill from "../StreakPill";
 
 export default function Progress({ data }: { data: TrainingData }) {
   const vols = data?.weeklyVolume ?? [{ label: "", tonnes: 0 }];
@@ -19,6 +20,12 @@ export default function Progress({ data }: { data: TrainingData }) {
             <h2 id="h-prog" className="section-title">Progreso</h2>
             {data.lastWorkout && <span className="small muted">Último: {data.lastWorkout.date}</span>}
           </div>
+          <StreakPill
+            n={data.stats.weekStreak}
+            unit={["semana", "semanas"]}
+            label="seguidas sin saltarte un entreno"
+            empty="Completa todos los entrenos de la semana para empezar una racha."
+          />
           <div className="tiles">
             <div className="tile outlined"><span style={{ fontSize: 20, fontWeight: 700 }}>{data.stats.workoutsMonth}</span><span className="tile-label">Entrenos mes</span></div>
             <div className="tile outlined"><span style={{ fontSize: 20, fontWeight: 700 }}>{data.stats.volumeWeek}</span><span className="tile-label">Volumen semana</span></div>

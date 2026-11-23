@@ -493,3 +493,9 @@ button:active, .tab:active, .add-btn:active, .scan:active { transform: scale(0.9
 .time-block { display: flex; flex-direction: column; gap: 8px; background: var(--card-2); border-radius: 14px; padding: 10px 12px; }
 .time-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .sheet { max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain; }
+
+/* Rachas */
+.streak { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); }
+.streak-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--card-2); color: var(--muted); flex-shrink: 0; }
+.streak.on { border-color: rgba(217, 119, 87, 0.45); }
+.streak.on .streak-icon { background: rgba(217, 119, 87, 0.16); color: var(--accent); }

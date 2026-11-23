@@ -7,7 +7,9 @@ import { TZ } from "./time";
 export type SessionKind = "push" | "pull" | "rehab" | "rest";
 
 /** Lunes Push, martes Pull, miércoles rehabilitación de rodilla, jueves Push, viernes Pull. */
-import { DEFAULT_SETTINGS, planForWeekday, type Settings } from "./settings";
+import { DEFAULT_SETTINGS, isGymPlan, planForWeekday, type Settings } from "./settings";
+import { dateFromKey } from "./agenda";
+import { weekStreak } from "./streaks";
 const KIND_LABEL: Record<SessionKind, string> = { push: "Push", pull: "Pull", rehab: "Rehabilitación de rodilla", rest: "Descanso" };
 const DAY_NAME = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
@@ -60,7 +62,7 @@ export type TodaySession = {
 export type Lift = { name: string; best: string; e1rm: string; trend: string; up: boolean | null };
 export type TrainingData = {
   session: TodaySession;
-  stats: { workoutsMonth: number; volumeWeek: string; prsMonth: number };
+  stats: { workoutsMonth: number; volumeWeek: string; prsMonth: number; weekStreak: number };
   weeklyVolume: { label: string; tonnes: number }[];
   lifts: Lift[];
   lastWorkout: { id: string; title: string; date: string } | null;
@@ -228,6 +230,7 @@ export function buildTraining(routines: HevyRoutine[], workouts: HevyWorkout[], 
     };
   });
 
+  const trainedDays = new Set(workouts.map((w) => madridDateKey(new Date(w.start_time))));
   const last = workouts[0];
   return {
     session: todaySession(routines, workouts, settings),
@@ -235,6 +238,11 @@ export function buildTraining(routines: HevyRoutine[], workouts: HevyWorkout[], 
       workoutsMonth,
       volumeWeek: `${weeklyVolume.at(-1)!.tonnes.toLocaleString("es-ES")} t`,
       prsMonth,
+      weekStreak: weekStreak(
+        madridDateKey(now),
+        (day) => isGymPlan(planForWeekday(settings, dateFromKey(day).getDay())),
+        (day) => trainedDays.has(day),
+      ),
     },
     weeklyVolume,
     lifts,
