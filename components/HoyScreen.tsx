@@ -1,14 +1,18 @@
 "use client";
 
+import SettingsLink from "./SettingsLink";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarIcon, CheckIcon, SunIcon } from "./icons";
 import Stars from "./Stars";
 import CalendarFull from "./CalendarFull";
 import { useStored } from "@/lib/useStored";
-import { addDays, agendaFor, dateFromKey, dateKey, DOW, sortTasks, TZ, WORKOUT_TIME, workoutFor, type Task } from "@/lib/agenda";
+import { addDays, agendaFor, dateFromKey, dateKey, DOW, sortTasks, TZ, workoutFor, type Task } from "@/lib/agenda";
+import { useSettings } from "@/lib/useSettings";
 
 
 export default function HoyScreen() {
+  const [settings] = useSettings();
+  const WORKOUT_TIME = settings.workoutTime;
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => setNow(new Date()), []);
   const today = now ? dateKey(now) : null;
@@ -118,8 +122,8 @@ export default function HoyScreen() {
 
   // --- Agenda del día: entreno + tareas, por hora ---
   const activeDate = activeDay ? dateFromKey(activeDay) : now;
-  const workout = activeDay ? workoutFor(activeDay) : undefined;
-  const agenda = activeDay ? agendaFor(activeDay, dayTasks, workoutTime) : [];
+  const workout = activeDay ? workoutFor(activeDay, settings) : undefined;
+  const agenda = activeDay ? agendaFor(activeDay, dayTasks, workoutTime, settings) : [];
 
   // --- Resumen ---
   const isToday = activeDay === today;
@@ -137,6 +141,7 @@ export default function HoyScreen() {
           <span className="eyebrow">{dateLabel}&nbsp;</span>
           <h1 className="title">{greeting}</h1>
         </div>
+        <SettingsLink />
       </header>
 
       {/* Resumen */}
@@ -343,6 +348,7 @@ export default function HoyScreen() {
           }}
           onClose={() => setFullCal(false)}
           tasksByDay={allTasks}
+          settings={settings}
           workoutTimeFor={workoutTimeFor}
           onAdd={(date, time) => openAdd(date, time)}
           onEditWorkout={editWorkout}
@@ -350,7 +356,7 @@ export default function HoyScreen() {
       )}
 
       {/* Hoja para cambiar la hora del entreno */}
-      {timeSheet && workoutFor(timeSheet.date) && (
+      {timeSheet && workoutFor(timeSheet.date, settings) && (
         <div className="sheet-backdrop" onClick={() => setTimeSheet(null)}>
           <form
             className="sheet"
@@ -364,7 +370,7 @@ export default function HoyScreen() {
             <div className="sheet-grip" aria-hidden="true" />
             <h2 id="h-hora" style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Hora del entreno</h2>
             <span className="small muted">
-              {workoutFor(timeSheet.date)!.title} · {timeSheet.date === today ? "hoy" : dateFromKey(timeSheet.date).toLocaleDateString("es-ES", { weekday: "long", day: "numeric" })}
+              {workoutFor(timeSheet.date, settings)!.title} · {timeSheet.date === today ? "hoy" : dateFromKey(timeSheet.date).toLocaleDateString("es-ES", { weekday: "long", day: "numeric" })}
             </span>
             <label className="field">Hora
               <input className="input" type="time" required value={timeSheet.time} onChange={(e) => setTimeSheet({ ...timeSheet, time: e.target.value })} />

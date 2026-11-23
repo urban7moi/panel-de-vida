@@ -7,14 +7,14 @@ import { unstable_cache } from "next/cache";
 import type { HevyWorkout } from "./hevy";
 import { e1rm } from "./training";
 import { TZ } from "./time";
+import { DEFAULT_SETTINGS, PLAN_INFO, planForWeekday, type Settings } from "./settings";
 
 const Tip = z.object({ title: z.string(), action: z.string(), body: z.string() });
 const Coach = z.object({ push: Tip.nullable(), pull: Tip.nullable(), general: Tip.nullable() });
 export type CoachTip = z.infer<typeof Tip>;
 export type CoachReport = z.infer<typeof Coach>;
 
-const SYSTEM = `Eres el entrenador personal de un hombre de 78 kg que busca recomposición en mantenimiento: no quiere bajar de peso, sino perder grasa y ganar músculo, subiendo poco a poco de peso en músculo, y mantenerse fuerte y atlético.
-Su semana: lunes Push, martes Pull, miércoles rehabilitación de rodilla, jueves Push, viernes Pull.
+const SYSTEM = `Eres el entrenador personal de un hombre que busca recomposición en mantenimiento: no quiere bajar de peso, sino perder grasa y ganar músculo, subiendo poco a poco de peso en músculo, y mantenerse fuerte y atlético.
 Está recién operado de rodilla: NO le propongas ejercicios ni cargas de pierna; para la rodilla limítate a recordarle que siga las pautas de su fisioterapeuta.
 
 Analiza sus últimos entrenos y devuelve SOLO la recomendación más importante de cada grupo:
@@ -47,12 +47,17 @@ function summarize(workouts: HevyWorkout[]) {
     .join("\n");
 }
 
-async function generate(workouts: HevyWorkout[]): Promise<CoachReport> {
+const DAY_NAMES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+function weekText(s: Settings) {
+  return [1, 2, 3, 4, 5, 6, 0].map((d) => `${DAY_NAMES[d]} ${PLAN_INFO[planForWeekday(s, d)].label}`).join(", ");
+}
+
+async function generate(workouts: HevyWorkout[], settings: Settings): Promise<CoachReport> {
   const client = new OpenAI();
   const res = await client.responses.parse({
     model: process.env.OPENAI_MODEL || "gpt-5.4-mini",
     instructions: SYSTEM,
-    input: `Entrenos recientes (del más nuevo al más antiguo):\n${summarize(workouts)}`,
+    input: `Su semana: ${weekText(settings)}. Pesa ${settings.weight} kg.\n\nEntrenos recientes (del más nuevo al más antiguo):\n${summarize(workouts)}`,
     text: { format: zodTextFormat(Coach, "informe_entrenador") },
   });
   const r = res.output_parsed;
@@ -61,11 +66,11 @@ async function generate(workouts: HevyWorkout[]): Promise<CoachReport> {
 }
 
 /** Informe del entrenador para el estado actual. Devuelve null si no hay clave de OpenAI o falla. */
-export async function coachTips(workouts: HevyWorkout[]): Promise<CoachReport | null> {
+export async function coachTips(workouts: HevyWorkout[], settings: Settings = DEFAULT_SETTINGS): Promise<CoachReport | null> {
   if (!process.env.OPENAI_API_KEY || workouts.length === 0) return null;
   const key = workouts[0].id;
   try {
-    return await unstable_cache(() => generate(workouts), ["coach-report-v4", key], { revalidate: 60 * 60 * 24 * 7 })();
+    return await unstable_cache(() => generate(workouts, settings), ["coach-report-v5", key, weekText(settings)], { revalidate: 60 * 60 * 24 * 7 })();
   } catch (err) {
     console.error("Coach", err);
     return null;

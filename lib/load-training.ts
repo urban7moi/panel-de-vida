@@ -2,9 +2,21 @@ import { cache } from "react";
 import { getRecentWorkouts, getRoutines, hevyConfigured, HevyError, type HevyWorkout } from "./hevy";
 import { buildTraining, type TrainingData } from "./training";
 import { translateTraining } from "./exercise-names";
+import { getStored } from "./store-server";
+import { withDefaults, type Settings } from "./settings";
+
+/** Ajustes guardados en la nube (o los de por defecto si no hay nube). */
+export const loadSettings = cache(async (): Promise<Settings> => {
+  try {
+    const s = await getStored<Partial<Settings>>("ajustes");
+    return withDefaults(s?.v);
+  } catch {
+    return withDefaults(null);
+  }
+});
 
 export type TrainingLoad =
-  | { status: "ok"; data: TrainingData; workouts: HevyWorkout[] }
+  | { status: "ok"; data: TrainingData; workouts: HevyWorkout[]; settings: Settings }
   | { status: "error"; error: string }
   | { status: "sin-configurar" };
 
@@ -12,9 +24,9 @@ export type TrainingLoad =
 export const loadTraining = cache(async (): Promise<TrainingLoad> => {
   if (!hevyConfigured()) return { status: "sin-configurar" };
   try {
-    const [routines, workouts] = await Promise.all([getRoutines(), getRecentWorkouts(90)]);
+    const [routines, workouts, settings] = await Promise.all([getRoutines(), getRecentWorkouts(90), loadSettings()]);
     await translateTraining(routines, workouts);
-    return { status: "ok", data: buildTraining(routines, workouts), workouts };
+    return { status: "ok", data: buildTraining(routines, workouts, settings), workouts, settings };
   } catch (err) {
     console.error("Hevy", err);
     const error =

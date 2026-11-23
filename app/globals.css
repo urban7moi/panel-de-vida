@@ -46,7 +46,7 @@ button, input, textarea, select { font-family: inherit; }
 .header-titles { display: flex; flex-direction: column; gap: 4px; }
 .eyebrow { font-size: 13px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .title { margin: 0; font-size: 32px; font-weight: 700; letter-spacing: -0.02em; }
-.sync { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); padding-bottom: 6px; }
+.sync { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 
 .section { display: flex; flex-direction: column; gap: 12px; }
 .section-head { display: flex; justify-content: space-between; align-items: center; }
@@ -464,3 +464,25 @@ button:active, .tab:active, .add-btn:active, .scan:active { transform: scale(0.9
 .idea-macros span { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: var(--card-2); color: var(--muted); }
 .idea-macros span:first-child { color: var(--accent-text); background: rgba(217, 119, 87, 0.14); }
 .idea-macros strong { color: inherit; }
+
+/* Ajustes */
+.gear-btn {
+  width: 44px; height: 44px; border-radius: 22px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line-2); background: var(--card); color: var(--muted);
+}
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 6px 0; }
+.set-row + .set-row { border-top: 1px solid var(--line); }
+.set-label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stepper { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.stepper button {
+  width: 36px; height: 36px; border-radius: 18px; border: 1px solid var(--line-2); background: var(--card-2);
+  color: var(--text); font-size: 18px; cursor: pointer;
+}
+.stepper input {
+  width: 74px; min-height: 36px; text-align: center; border-radius: 10px; border: 1px solid var(--line-2);
+  background: var(--card-2); color: var(--text); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.week-plan { display: grid; grid-template-columns: 40px 1fr; align-items: center; gap: 8px 10px; }
+.week-plan .chips { margin: 0; padding: 0; }
+.plan-chip { min-height: 32px; padding: 0 10px; font-size: 13px; }
+.status-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }

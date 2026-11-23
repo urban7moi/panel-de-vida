@@ -1,11 +1,13 @@
 "use client";
 
+import SettingsLink from "./SettingsLink";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CameraIcon, InfoIcon } from "./icons";
-import { macroGoals } from "@/lib/mock";
 import { useStored } from "@/lib/useStored";
 import { shrinkImage } from "@/lib/image";
 import { addDays, dateFromKey, dateKey, TZ } from "@/lib/agenda";
+import { useSettings } from "@/lib/useSettings";
+import { goalsFor as goalsOf, isGymPlan, planForWeekday } from "@/lib/settings";
 
 type MealType = "desayuno" | "comida" | "merienda" | "cena" | "snack";
 type Meal = { id: string; name: string; kcal: number; p: number; c: number; g: number; type: MealType; time: string };
@@ -21,7 +23,6 @@ const TYPES: { key: MealType; label: string }[] = [
   { key: "cena", label: "Cena" },
   { key: "snack", label: "Snack" },
 ];
-const WATER_GOAL = 10; // vasos de 250 ml = 2,5 L
 const steps = ["Identificando los alimentos…", "Calculando la ración…", "Estimando calorías y macros…"];
 
 const kcalOf = (p: number, c: number, g: number) => p * 4 + c * 4 + g * 9;
@@ -42,12 +43,13 @@ function typeByHour(): MealType {
   if (h < 23) return "cena";
   return "snack";
 }
-/** Lunes, martes, jueves y viernes son días de pesas. */
-const isGymDay = (key: string) => [1, 2, 4, 5].includes(dateFromKey(key).getDay());
-const goalsFor = (key: string) => (isGymDay(key) ? macroGoals.training : macroGoals.rest);
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export default function ComidaScreen() {
+  const [settings] = useSettings();
+  /** Días de pesas según tus ajustes. */
+  const isGymDay = (key: string) => isGymPlan(planForWeekday(settings, dateFromKey(key).getDay()));
+  const goalsFor = (key: string) => goalsOf(settings, isGymDay(key));
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => setToday(dateKey(new Date())), []);
   const [day, setDay] = useState<string | null>(null);
@@ -82,8 +84,8 @@ export default function ComidaScreen() {
   }, [today, setAllMeals]);
 
   const meals = (active && allMeals[active]) || [];
-  const goals = active ? goalsFor(active) : macroGoals.training;
-  const kGoal = kcalOf(goals.p, goals.c, goals.g);
+  const goals = goalsFor(active ?? "2000-01-03");
+  const kGoal = goals.kcal;
   const eaten = meals.reduce((a, m) => ({ kcal: a.kcal + m.kcal, p: a.p + m.p, c: a.c + m.c, g: a.g + m.g }), { kcal: 0, p: 0, c: 0, g: 0 });
   const kPct = Math.min(100, Math.round((eaten.kcal / kGoal) * 100));
   const over = eaten.kcal > kGoal;
@@ -221,6 +223,7 @@ export default function ComidaScreen() {
   const planStale = !!plan && plan.basedOn !== signature;
 
   // --- Agua ---
+  const WATER_GOAL = settings.waterGlasses;
   const glasses = (active && water[active]) || 0;
   const setGlasses = (n: number) => active && setWater((w) => ({ ...w, [active]: Math.max(0, Math.min(20, n)) }));
 
@@ -236,11 +239,12 @@ export default function ComidaScreen() {
         label: dateFromKey(key).toLocaleDateString("es-ES", { weekday: "narrow" }).toUpperCase(),
         kcal: list.reduce((a, m) => a + m.kcal, 0),
         p: list.reduce((a, m) => a + m.p, 0),
-        goal: kcalOf(g.p, g.c, g.g),
+        goal: g.kcal,
         logged: list.length > 0,
       };
     });
-  }, [active, allMeals]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, allMeals, settings]);
   const logged = week.filter((d) => d.logged);
   const avgKcal = logged.length ? Math.round(logged.reduce((a, d) => a + d.kcal, 0) / logged.length) : 0;
   const avgP = logged.length ? Math.round(logged.reduce((a, d) => a + d.p, 0) / logged.length) : 0;
@@ -255,6 +259,7 @@ export default function ComidaScreen() {
           <span className="eyebrow">{active ? (isGymDay(active) ? "Día de entreno" : "Día de descanso") : " "}</span>
           <h1 className="title">Alimentación</h1>
         </div>
+        <SettingsLink />
       </header>
 
       {/* Navegación de días */}

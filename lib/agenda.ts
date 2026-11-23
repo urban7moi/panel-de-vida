@@ -1,4 +1,5 @@
 // Datos compartidos de la agenda: entrenos de la semana, tareas y utilidades de fechas.
+import { PLAN_INFO, planForWeekday, type Settings } from "./settings";
 
 export type Task = {
   id: string;
@@ -11,16 +12,6 @@ export type Task = {
 export type AgendaItem =
   | { kind: "workout"; time: string; title: string; detail: string }
   | { kind: "task"; time: string; task: Task };
-
-/** Entrenos de la semana, normalmente a las 12:00 (0 = domingo). */
-export const WORKOUT_TIME = "12:00";
-export const WORKOUTS: Record<number, { title: string; detail: string }> = {
-  1: { title: "Entreno · Push", detail: "Pecho, hombro y tríceps" },
-  2: { title: "Entreno · Pull", detail: "Espalda y bíceps" },
-  3: { title: "Rehabilitación de rodilla", detail: "Ejercicios del fisio" },
-  4: { title: "Entreno · Push", detail: "Pecho, hombro y tríceps" },
-  5: { title: "Entreno · Pull", detail: "Espalda y bíceps" },
-};
 
 export const DOW = ["L", "M", "X", "J", "V", "S", "D"];
 export const TZ = "Europe/Madrid";
@@ -38,7 +29,11 @@ export function addDays(key: string, n: number) {
 /** Lunes de la semana de esa fecha. */
 export const mondayOf = (key: string) => addDays(key, -((dateFromKey(key).getDay() + 6) % 7));
 
-export const workoutFor = (key: string) => WORKOUTS[dateFromKey(key).getDay()];
+/** Entreno de ese día según tus ajustes (undefined si es día de descanso). */
+export function workoutFor(key: string, settings: Settings) {
+  const plan = planForWeekday(settings, dateFromKey(key).getDay());
+  return plan === "rest" ? undefined : { plan, ...PLAN_INFO[plan] };
+}
 
 /** Por hora (las que no tienen hora, al final) y, a igual hora, las más importantes primero. */
 export function sortTasks(tasks: Task[]) {
@@ -50,10 +45,10 @@ export function sortTasks(tasks: Task[]) {
 }
 
 /** Entreno y tareas de un día, ordenados por hora. */
-export function agendaFor(key: string, tasks: Task[], workoutTime: string): AgendaItem[] {
-  const workout = workoutFor(key);
+export function agendaFor(key: string, tasks: Task[], workoutTime: string, settings: Settings): AgendaItem[] {
+  const workout = workoutFor(key, settings);
   return [
-    ...(workout ? [{ kind: "workout" as const, time: workoutTime, ...workout }] : []),
+    ...(workout ? [{ kind: "workout" as const, time: workoutTime, title: workout.title, detail: workout.detail }] : []),
     ...sortTasks(tasks).map((task) => ({ kind: "task" as const, time: task.time, task })),
   ].sort((a, b) => (a.time && b.time ? a.time.localeCompare(b.time) : a.time ? -1 : b.time ? 1 : 0));
 }

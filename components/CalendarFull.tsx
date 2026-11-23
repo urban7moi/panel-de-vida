@@ -14,6 +14,7 @@ import {
   workoutFor,
   type Task,
 } from "@/lib/agenda";
+import type { Settings } from "@/lib/settings";
 
 type Props = {
   today: string;
@@ -21,6 +22,7 @@ type Props = {
   onSelect: (key: string) => void;
   onClose: () => void;
   tasksByDay: Record<string, Task[]>;
+  settings: Settings;
   workoutTimeFor: (key: string) => string;
   onAdd: (date: string, time: string) => void;
   onEditWorkout: (date: string) => void;
@@ -31,7 +33,7 @@ const FIRST_HOUR = 6;
 const LAST_HOUR = 24;
 
 /** Calendario a pantalla completa, al estilo del iPhone: vista Mes y vista Semana. */
-export default function CalendarFull({ today, selected, onSelect, onClose, tasksByDay, workoutTimeFor, onAdd, onEditWorkout }: Props) {
+export default function CalendarFull({ today, selected, onSelect, onClose, tasksByDay, settings, workoutTimeFor, onAdd, onEditWorkout }: Props) {
   const [view, setView] = useState<"mes" | "semana">("mes");
   const [month, setMonth] = useState(() => selected.slice(0, 7)); // "2026-11"
   const [weekStart, setWeekStart] = useState(() => mondayOf(selected));
@@ -93,7 +95,7 @@ export default function CalendarFull({ today, selected, onSelect, onClose, tasks
 
   const selectedDate = dateFromKey(selected);
   const selectedLabel = cap(selectedDate.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" }));
-  const agenda = agendaFor(selected, tasksByDay[selected] ?? [], workoutTimeFor(selected));
+  const agenda = agendaFor(selected, tasksByDay[selected] ?? [], workoutTimeFor(selected), settings);
 
   return (
     <div className="fullcal" role="dialog" aria-modal="true" aria-labelledby="h-fullcal">
@@ -144,7 +146,7 @@ export default function CalendarFull({ today, selected, onSelect, onClose, tasks
                 >
                   <span className="month-num">{d.getDate()}</span>
                   <span className="month-dots" aria-hidden="true">
-                    {workoutFor(key) && <i style={{ background: "var(--google)" }} />}
+                    {workoutFor(key, settings) && <i style={{ background: "var(--google)" }} />}
                     {hasTasks && <i style={{ background: "var(--accent)" }} />}
                   </span>
                 </button>
@@ -226,6 +228,7 @@ export default function CalendarFull({ today, selected, onSelect, onClose, tasks
                   nowMin={nowMin}
                   tasks={tasksByDay[key] ?? []}
                   workoutTime={workoutTimeFor(key)}
+                  settings={settings}
                   onEmpty={(time) => {
                     select(key);
                     onAdd(key, time);
@@ -294,6 +297,7 @@ function DayColumn({
   nowMin,
   tasks,
   workoutTime,
+  settings,
   onEmpty,
   onWorkout,
   onTask,
@@ -303,11 +307,12 @@ function DayColumn({
   nowMin: number;
   tasks: Task[];
   workoutTime: string;
+  settings: Settings;
   onEmpty: (time: string) => void;
   onWorkout: () => void;
   onTask: () => void;
 }) {
-  const workout = workoutFor(dayKey);
+  const workout = workoutFor(dayKey, settings);
   const blocks = layout([
     ...(workout ? [{ id: "w", start: toMinutes(workoutTime), end: toMinutes(workoutTime) + 60, title: shortWorkout(workout.title), kind: "workout" as const }] : []),
     ...tasks

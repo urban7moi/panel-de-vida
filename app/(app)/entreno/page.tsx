@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import SettingsLink from "@/components/SettingsLink";
 import Progress from "@/components/entreno/Progress";
 import TodayCard from "@/components/entreno/TodayCard";
 import Coach from "@/components/entreno/Coach";
@@ -17,9 +18,12 @@ export default function Page() {
           <span className="eyebrow">Recomposición · mantenimiento</span>
           <h1 className="title">Entreno</h1>
         </div>
-        <Suspense fallback={<span className="sync"><i className="dot pulse" style={{ background: "var(--muted)" }} />Hevy</span>}>
-          <HevyStatus />
-        </Suspense>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Suspense fallback={<span className="sync"><i className="dot pulse" style={{ background: "var(--muted)" }} />Hevy</span>}>
+            <HevyStatus />
+          </Suspense>
+          <SettingsLink />
+        </div>
       </header>
 
       <Suspense fallback={<div className="skeleton" style={{ height: 330 }} />}>
@@ -89,6 +93,6 @@ async function ProgressSection() {
 async function CoachSection() {
   const t = await loadTraining();
   if (t.status !== "ok") return null;
-  const tips = await coachTips(t.workouts);
+  const tips = await coachTips(t.workouts, t.settings);
   return tips ? <Coach tips={tips} lastDate={t.data.lastWorkout?.date ?? null} /> : null;
 }

@@ -7,7 +7,7 @@ import { TZ } from "./time";
 export type SessionKind = "push" | "pull" | "rehab" | "rest";
 
 /** Lunes Push, martes Pull, miércoles rehabilitación de rodilla, jueves Push, viernes Pull. */
-const WEEK: Record<number, SessionKind> = { 1: "push", 2: "pull", 3: "rehab", 4: "push", 5: "pull", 6: "rest", 0: "rest" };
+import { DEFAULT_SETTINGS, planForWeekday, type Settings } from "./settings";
 const KIND_LABEL: Record<SessionKind, string> = { push: "Push", pull: "Pull", rehab: "Rehabilitación de rodilla", rest: "Descanso" };
 const DAY_NAME = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
@@ -108,14 +108,15 @@ function plan(routine: HevyRoutine, workouts: HevyWorkout[]): PlannedExercise[] 
     });
 }
 
-function todaySession(routines: HevyRoutine[], workouts: HevyWorkout[]): TodaySession {
+function todaySession(routines: HevyRoutine[], workouts: HevyWorkout[], settings: Settings): TodaySession {
+  const WEEK = (d: number) => planForWeekday(settings, d);
   const today = madridWeekday();
   let offset = 0;
-  let kind = WEEK[today];
+  let kind = WEEK(today);
   // En días de descanso enseñamos la próxima sesión.
   while (kind === "rest" && offset < 7) {
     offset++;
-    kind = WEEK[(today + offset) % 7];
+    kind = WEEK((today + offset) % 7);
   }
   const when = offset === 0 ? "Hoy" : offset === 1 ? "Mañana" : `El ${DAY_NAME[(today + offset) % 7]}`;
   const routine = kind === "rest" ? null : findRoutine(routines, kind, workouts);
@@ -145,7 +146,7 @@ function volumeOf(w: HevyWorkout) {
   );
 }
 
-export function buildTraining(routines: HevyRoutine[], workouts: HevyWorkout[]): TrainingData {
+export function buildTraining(routines: HevyRoutine[], workouts: HevyWorkout[], settings: Settings = DEFAULT_SETTINGS): TrainingData {
   const now = new Date();
 
   // Volumen por semana (8 semanas, de la más antigua a la actual)
@@ -229,7 +230,7 @@ export function buildTraining(routines: HevyRoutine[], workouts: HevyWorkout[]):
 
   const last = workouts[0];
   return {
-    session: todaySession(routines, workouts),
+    session: todaySession(routines, workouts, settings),
     stats: {
       workoutsMonth,
       volumeWeek: `${weeklyVolume.at(-1)!.tonnes.toLocaleString("es-ES")} t`,
