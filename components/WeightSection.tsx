@@ -96,9 +96,7 @@ export default function WeightSection({ today }: { today: string }) {
               </g>
             ))}
           </svg>
-        ) : (
-          <span className="small muted">Apunta tu peso 2–3 veces por semana, en ayunas, para ver la tendencia.</span>
-        )}
+        ) : null}
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <span className="scan-icon" style={{ width: 40, height: 40 }}><ScaleIcon size={20} /></span>

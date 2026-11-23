@@ -15,11 +15,12 @@ export type CoachTip = z.infer<typeof Tip>;
 export type CoachReport = z.infer<typeof Coach>;
 
 const SYSTEM = `Eres el entrenador personal de un hombre que busca recomposición en mantenimiento: no quiere bajar de peso, sino perder grasa y ganar músculo, subiendo poco a poco de peso en músculo, y mantenerse fuerte y atlético.
-Está recién operado de rodilla: NO le propongas ejercicios ni cargas de pierna; para la rodilla limítate a recordarle que siga las pautas de su fisioterapeuta.
+Está recuperándose de una operación de rodilla: si en su semana hay días de Pierna, puedes opinar sobre ellos, pero sé prudente con la carga y recuérdale seguir las pautas de su fisioterapeuta; si no hay días de Pierna, no le propongas ejercicios de pierna.
 
 Analiza sus últimos entrenos y devuelve SOLO la recomendación más importante de cada grupo:
 - "push": la más importante de sus sesiones de empuje (pecho, hombro, tríceps).
 - "pull": la más importante de sus sesiones de tirón (espalda, bíceps).
+- Si tiene sesiones de Pierna, inclúyelas en "general" cuando sean lo más relevante.
 - "general": la más importante en general (equilibrio empuje/tirón, volumen, descanso).
 Si un grupo no tiene datos, devuélvelo como null.
 
@@ -70,7 +71,7 @@ export async function coachTips(workouts: HevyWorkout[], settings: Settings = DE
   if (!process.env.OPENAI_API_KEY || workouts.length === 0) return null;
   const key = workouts[0].id;
   try {
-    return await unstable_cache(() => generate(workouts, settings), ["coach-report-v5", key, weekText(settings)], { revalidate: 60 * 60 * 24 * 7 })();
+    return await unstable_cache(() => generate(workouts, settings), ["coach-report-v6", key, weekText(settings)], { revalidate: 60 * 60 * 24 * 7 })();
   } catch (err) {
     console.error("Coach", err);
     return null;

@@ -6,7 +6,6 @@ import TodayCard from "@/components/entreno/TodayCard";
 import Coach from "@/components/entreno/Coach";
 import { coachTips } from "@/lib/coach";
 import { loadTraining } from "@/lib/load-training";
-import RehabSection from "@/components/entreno/RehabSection";
 
 export const metadata: Metadata = { title: "Entreno · Panel de Vida" };
 
@@ -30,8 +29,6 @@ export default function Page() {
       <Suspense fallback={<div className="skeleton" style={{ height: 330 }} />}>
         <TodaySection />
       </Suspense>
-
-      <RehabSection />
 
       <Suspense fallback={<SectionSkeleton title="Progreso" height={420} />}>
         <ProgressSection />

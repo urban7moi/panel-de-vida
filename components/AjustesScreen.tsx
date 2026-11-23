@@ -16,7 +16,7 @@ const DAYS: [string, string][] = [
   ["6", "S"],
   ["0", "D"],
 ];
-const PLANS: DayPlan[] = ["push", "pull", "rehab", "rest"];
+const PLANS: DayPlan[] = ["push", "pull", "legs", "rehab", "rest"];
 const fmt = (n: number) => n.toLocaleString("es-ES", { useGrouping: "always" } as Intl.NumberFormatOptions);
 
 function Stepper({
@@ -93,7 +93,7 @@ export default function AjustesScreen() {
         </div>
         <span className="small muted" style={{ lineHeight: 1.5 }}>
           {cloud === "on"
-            ? "Tareas, comidas, agua, peso, rodilla y ajustes se guardan en la nube y se sincronizan solos."
+            ? "Tareas, comidas, agua, peso y ajustes se guardan en la nube y se sincronizan solos."
             : "Tus datos solo están en este iPhone. Conecta la base de datos gratuita en Vercel (Storage → Upstash Redis) para no perderlos."}
         </span>
       </section>

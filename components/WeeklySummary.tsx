@@ -10,7 +10,6 @@ import { CheckIcon, SparkIcon } from "./icons";
 
 type Meal = { kcal: number; p: number };
 type Report = { headline: string; wins: string[]; improve: string[]; goals: string[]; at: string };
-type RehabSession = { done: string[]; pain: number | null; flex: number | null };
 
 /** Resumen de los últimos 7 días con la IA: logros, a mejorar y 3 objetivos. */
 export default function WeeklySummary({
@@ -27,7 +26,6 @@ export default function WeeklySummary({
   const [meals] = useStored<Record<string, Meal[]>>("comidas-v2", {});
   const [water] = useStored<Record<string, number>>("agua", {});
   const [manualWeights] = useStored<Record<string, number>>("peso", {});
-  const [rehab] = useStored<{ sessions?: Record<string, RehabSession> }>("rodilla", {});
   const [reports, setReports] = useStored<Record<string, Report>>("resumen-semanal", {});
   const [hevyWeights, setHevyWeights] = useState<WeightPoint[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,16 +42,15 @@ export default function WeeklySummary({
       .catch(() => {});
   }, []);
 
-  /** Datos de los últimos 7 días en texto, para la IA. */
+  /** Datos de esta semana (de lunes a hoy) en texto, para la IA. */
   function buildData() {
-    const days = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6));
+    const days = Array.from({ length: 7 }, (_, i) => addDays(week, i)).filter((d) => d <= today);
     const lines: string[] = [];
     let tasksTotal = 0;
     let tasksDone = 0;
     let planned = 0;
     let trained = 0;
-    let tonnes = 0;
-    let prs = 0;
+        let prs = 0;
     let proteinOk = 0;
     const kcal: number[] = [];
     const prot: number[] = [];
@@ -66,7 +63,6 @@ export default function WeeklySummary({
       const w = doneWorkouts[d];
       if (w) {
         trained++;
-        tonnes += w.tonnes;
         prs += w.prs;
       }
       const list = meals[d] ?? [];
@@ -80,12 +76,12 @@ export default function WeeklySummary({
     }
     const avg = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : 0);
     const g = goalsFor(settings, true);
-    lines.push(`Semana del ${days[0]} al ${days[6]}.`);
-    lines.push(`Entrenos: ${trained} hechos de ${planned} programados; volumen total ${tonnes.toFixed(1)} t; ${prs} récords.`);
+    lines.push(`Semana del lunes ${days[0]} al domingo ${addDays(week, 6)}; datos hasta hoy (${today}), ${days.length} de 7 días.`);
+    lines.push(`Entrenos: ${trained} hechos de ${planned} programados hasta hoy; ${prs} récords.`);
     lines.push(`Tareas: ${tasksDone} de ${tasksTotal} completadas.`);
     lines.push(
       kcal.length
-        ? `Comida apuntada ${kcal.length} de 7 días: media ${avg(kcal)} kcal (objetivo ~${g.kcal}) y ${avg(prot)} g de proteína (objetivo ${g.p} g); llegó a la proteína ${proteinOk} días.`
+        ? `Comida apuntada ${kcal.length} de ${days.length} días: media ${avg(kcal)} kcal (objetivo ~${g.kcal}) y ${avg(prot)} g de proteína (objetivo ${g.p} g); llegó a la proteína ${proteinOk} días.`
         : "No apuntó comidas esta semana.",
     );
     const waterDays = days.map((d) => water[d] ?? 0).filter((n) => n > 0);
@@ -94,14 +90,6 @@ export default function WeeklySummary({
     const trend = weeklyTrend(weights, today);
     const wk = weights.filter((p) => p.date >= days[0]);
     if (wk.length) lines.push(`Peso: de ${wk[0].kg} kg a ${wk[wk.length - 1].kg} kg${trend !== null ? `; tendencia ${trend.toFixed(2)} kg/semana` : ""}.`);
-    const rs = days.map((d) => rehab.sessions?.[d]).filter((s): s is RehabSession => !!s && (s.pain !== null || s.done.length > 0));
-    if (rs.length) {
-      const pains = rs.map((s) => s.pain).filter((p): p is number => p !== null);
-      const flex = rs.map((s) => s.flex).filter((f): f is number => f !== null);
-      lines.push(
-        `Rodilla: ${rs.length} sesiones de rehabilitación${pains.length ? `; dolor de ${pains[0]} a ${pains[pains.length - 1]} sobre 10` : ""}${flex.length ? `; flexión ${flex[flex.length - 1]}°` : ""}.`,
-      );
-    }
     return lines.join("\n");
   }
 
@@ -137,7 +125,7 @@ export default function WeeklySummary({
         <div className="card nutri-loading" role="status" aria-live="polite">
           <span className="spinner" aria-hidden="true" />
           <span style={{ fontSize: 16, fontWeight: 600 }}>Repasando tu semana</span>
-          <span className="small muted">Entrenos, comida, peso, tareas y rodilla…</span>
+          <span className="small muted">Entrenos, comida, peso y tareas…</span>
         </div>
       ) : report ? (
         <div className="card" style={{ gap: 14 }}>
@@ -165,7 +153,7 @@ export default function WeeklySummary({
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <span className="tip-icon" style={{ color: "var(--accent)" }}><SparkIcon size={18} /></span>
             <span className="small" style={{ lineHeight: 1.5 }}>
-              {isSunday ? "Es domingo: buen momento para repasar la semana." : "Repasa tus últimos 7 días:"} entrenos, comida, peso, tareas y rodilla, con 3 objetivos para la semana siguiente.
+              {isSunday ? "Es domingo: buen momento para repasar la semana." : "Repasa esta semana, de lunes a hoy:"} entrenos, comida, peso y tareas, con 3 objetivos para la semana siguiente.
             </span>
           </div>
           <button type="button" className="btn-primary" onClick={generate}>Hacer el resumen de la semana</button>

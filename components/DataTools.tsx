@@ -100,19 +100,6 @@ export default function DataTools() {
       },
     },
     {
-      label: "Rodilla",
-      file: `rodilla-${stamp}.csv`,
-      build: () => {
-        const r = read<{ exercises?: { id: string; name: string }[]; sessions?: Record<string, { done: string[]; pain: number | null; flex: number | null; notes: string }> }>("rodilla", {});
-        const names = new Map((r.exercises ?? []).map((x) => [x.id, x.name]));
-        const s = r.sessions ?? {};
-        const rows = Object.keys(s)
-          .sort()
-          .map((d) => [d, s[d].pain, s[d].flex, s[d].done.map((id) => names.get(id)).filter(Boolean).join(", "), s[d].notes]);
-        return toCsv(["Fecha", "Dolor (0-10)", "Flexión (°)", "Ejercicios hechos", "Notas"], rows);
-      },
-    },
-    {
       label: "Agua",
       file: `agua-${stamp}.csv`,
       build: () => {
@@ -153,7 +140,7 @@ export default function DataTools() {
     <section className="section" aria-labelledby="h-datos">
       <h2 id="h-datos" className="section-title">Tus datos</h2>
       <div className="card" style={{ gap: 12 }}>
-        <span className="small muted" style={{ lineHeight: 1.5 }}>Exporta a Excel (CSV) para llevárselo a tu nutricionista o a tu fisio.</span>
+        <span className="small muted" style={{ lineHeight: 1.5 }}>Exporta a Excel (CSV), por ejemplo para llevárselo a tu nutricionista.</span>
         <div className="chips" style={{ flexWrap: "wrap" }}>
           {exports.map((x) => (
             <button key={x.file} type="button" className="chip-btn" onClick={() => deliver(x.file, x.build(), "text/csv")}>
@@ -162,7 +149,7 @@ export default function DataTools() {
           ))}
         </div>
         <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-          <span className="small muted" style={{ lineHeight: 1.5 }}>Copia completa de todo (tareas, comidas, peso, rodilla, ajustes…) para guardarla o pasarla a otro móvil.</span>
+          <span className="small muted" style={{ lineHeight: 1.5 }}>Copia completa de todo (tareas, comidas, peso, ajustes…) para guardarla o pasarla a otro móvil.</span>
           <div style={{ display: "flex", gap: 10 }}>
             <button type="button" className="btn-secondary" onClick={backup}>Hacer copia</button>
             <button type="button" className="btn-secondary" onClick={() => fileRef.current?.click()}>Restaurar</button>

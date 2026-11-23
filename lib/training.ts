@@ -4,19 +4,19 @@ import { TZ } from "./time";
 
 // --- Calendario semanal ----------------------------------------------------
 
-export type SessionKind = "push" | "pull" | "rehab" | "rest";
+export type SessionKind = "push" | "pull" | "legs" | "rehab" | "rest";
 
-/** Lunes Push, martes Pull, miércoles rehabilitación de rodilla, jueves Push, viernes Pull. */
 import { DEFAULT_SETTINGS, isGymPlan, planForWeekday, type Settings } from "./settings";
 import { dateFromKey } from "./agenda";
 import { weekStreak } from "./streaks";
-const KIND_LABEL: Record<SessionKind, string> = { push: "Push", pull: "Pull", rehab: "Rehabilitación de rodilla", rest: "Descanso" };
+const KIND_LABEL: Record<SessionKind, string> = { push: "Push", pull: "Pull", legs: "Pierna", rehab: "Rehabilitación de rodilla", rest: "Descanso" };
 const DAY_NAME = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
-const KEYWORDS: Record<"push" | "pull" | "rehab", RegExp> = {
+const KEYWORDS: Record<"push" | "pull" | "legs" | "rehab", RegExp> = {
   push: /\b(push|empuje)\b/i,
   pull: /\b(pull|tir[oó]n)\b/i,
-  rehab: /(rodilla|rehab|pierna|leg)/i,
+  legs: /\b(pierna|piernas|legs?|lower|tren inferior)\b/i,
+  rehab: /(rodilla|rehab)/i,
 };
 
 function madridWeekday(d = new Date()) {
@@ -60,17 +60,26 @@ export type TodaySession = {
   exercises: PlannedExercise[];
 };
 export type Lift = { name: string; best: string; e1rm: string; trend: string; up: boolean | null };
+export type CategoryKey = "push" | "pull" | "legs";
+export type CategoryProgress = {
+  key: CategoryKey;
+  label: string;
+  /** Una por sesión: fuerza media respecto a la primera sesión (100 = igual). */
+  sessions: { date: string; label: string; index: number; thisWeek: boolean; best: string }[];
+  change: number; // % de la última sesión frente a la primera
+  movers: { name: string; from: number; to: number }[]; // ejercicios que más han cambiado (1RM, kg)
+};
 export type TrainingData = {
   session: TodaySession;
-  stats: { workoutsMonth: number; volumeWeek: string; prsMonth: number; weekStreak: number };
-  weeklyVolume: { label: string; tonnes: number }[];
+  stats: { workoutsMonth: number; weekDone: number; weekPlanned: number; prsMonth: number; weekStreak: number };
+  categories: CategoryProgress[];
   lifts: Lift[];
   lastWorkout: { id: string; title: string; date: string } | null;
 };
 
 // --- Sesión de hoy -------------------------------------------------------------
 
-function findRoutine(routines: HevyRoutine[], kind: "push" | "pull" | "rehab", workouts: HevyWorkout[]) {
+function findRoutine(routines: HevyRoutine[], kind: "push" | "pull" | "legs" | "rehab", workouts: HevyWorkout[]) {
   const matches = routines.filter((r) => KEYWORDS[kind].test(r.title));
   if (matches.length <= 1) return matches[0] ?? null;
   // Si hay varias (Push A / Push B), toca la que hace más tiempo que no haces.
@@ -151,24 +160,6 @@ function volumeOf(w: HevyWorkout) {
 export function buildTraining(routines: HevyRoutine[], workouts: HevyWorkout[], settings: Settings = DEFAULT_SETTINGS): TrainingData {
   const now = new Date();
 
-  // Volumen por semana (8 semanas, de la más antigua a la actual)
-  const weeks: string[] = [];
-  const thisMonday = new Date(mondayKey(now) + "T12:00:00Z");
-  for (let i = 7; i >= 0; i--) {
-    const d = new Date(thisMonday);
-    d.setUTCDate(d.getUTCDate() - i * 7);
-    weeks.push(d.toISOString().slice(0, 10));
-  }
-  const vol: Record<string, number> = Object.fromEntries(weeks.map((w) => [w, 0]));
-  for (const w of workouts) {
-    const k = mondayKey(new Date(w.start_time));
-    if (k in vol) vol[k] += volumeOf(w);
-  }
-  const weeklyVolume = weeks.map((k) => ({
-    label: new Date(k + "T12:00:00Z").toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "UTC" }),
-    tonnes: Math.round(vol[k] / 100) / 10,
-  }));
-
   // Entrenos y récords del mes
   const monthKey = madridDateKey(now).slice(0, 7);
   const inMonth = (iso: string) => madridDateKey(new Date(iso)).slice(0, 7) === monthKey;
@@ -231,12 +222,25 @@ export function buildTraining(routines: HevyRoutine[], workouts: HevyWorkout[], 
   });
 
   const trainedDays = new Set(workouts.map((w) => madridDateKey(new Date(w.start_time))));
+  // Esta semana: entrenos hechos frente a los programados (de lunes a domingo).
+  const todayKey = madridDateKey(now);
+  const mon = new Date(mondayKey(now) + "T12:00:00Z");
+  let weekPlanned = 0;
+  let weekDone = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(mon);
+    d.setUTCDate(mon.getUTCDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    if (isGymPlan(planForWeekday(settings, d.getUTCDay()))) weekPlanned++;
+    if (trainedDays.has(key) && key <= todayKey) weekDone++;
+  }
   const last = workouts[0];
   return {
     session: todaySession(routines, workouts, settings),
     stats: {
       workoutsMonth,
-      volumeWeek: `${weeklyVolume.at(-1)!.tonnes.toLocaleString("es-ES")} t`,
+      weekDone,
+      weekPlanned,
       prsMonth,
       weekStreak: weekStreak(
         madridDateKey(now),
@@ -244,7 +248,7 @@ export function buildTraining(routines: HevyRoutine[], workouts: HevyWorkout[], 
         (day) => trainedDays.has(day),
       ),
     },
-    weeklyVolume,
+    categories: categoryProgress(workouts, routines, madridDateKey(now)),
     lifts,
     lastWorkout: last
       ? { id: last.id, title: last.title, date: new Date(last.start_time).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", timeZone: TZ }) }
@@ -282,4 +286,75 @@ export function workoutDays(workouts: HevyWorkout[]): WorkoutDay[] {
     );
   }
   return [...byDay.values()].map((d) => ({ ...d, tonnes: Math.round(d.tonnes * 10) / 10 }));
+}
+
+
+// --- Progreso por tipo de sesión (Push, Pull, Pierna) ---
+
+const CATEGORY_LABEL: Record<CategoryKey, string> = { push: "Push", pull: "Pull", legs: "Pierna" };
+
+function categoryOf(w: HevyWorkout, routines: HevyRoutine[]): CategoryKey | null {
+  const title = (w.routine_id && routines.find((r) => r.id === w.routine_id)?.title) || w.title;
+  for (const k of ["push", "pull", "legs"] as const) if (KEYWORDS[k].test(title)) return k;
+  return null;
+}
+
+export function categoryProgress(workouts: HevyWorkout[], routines: HevyRoutine[], today: string): CategoryProgress[] {
+  const monday = (() => {
+    const d = new Date(today + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return d.toISOString().slice(0, 10);
+  })();
+  const byCat = new Map<CategoryKey, HevyWorkout[]>();
+  for (const w of [...workouts].sort((a, b) => a.start_time.localeCompare(b.start_time))) {
+    const k = categoryOf(w, routines);
+    if (k) byCat.set(k, [...(byCat.get(k) ?? []), w]);
+  }
+
+  const out: CategoryProgress[] = [];
+  for (const k of ["push", "pull", "legs"] as const) {
+    const list = (byCat.get(k) ?? []).slice(-12);
+    if (list.length < 1) continue;
+    const baseline: Record<string, number> = {};
+    const first: Record<string, { name: string; v: number }> = {};
+    const last: Record<string, { name: string; v: number }> = {};
+    const sessions = list.map((w) => {
+      let sumNow = 0;
+      let sumBase = 0;
+      let bestEx = { name: "", v: 0 };
+      for (const e of w.exercises) {
+        const top = Math.max(0, ...e.sets.filter(isWorking).map(e1rm));
+        if (!top) continue;
+        const id = e.exercise_template_id;
+        baseline[id] ??= top;
+        first[id] ??= { name: e.title, v: top };
+        last[id] = { name: e.title, v: top };
+        // Cada ejercicio cuenta según los kilos que mueve: los pequeños no inflan el resultado.
+        sumNow += top;
+        sumBase += baseline[id];
+        if (top > bestEx.v) bestEx = { name: e.title, v: top };
+      }
+      const date = madridDateKey(new Date(w.start_time));
+      return {
+        date,
+        label: new Date(date + "T12:00:00Z").toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).replace(/\./g, ""),
+        index: sumBase ? Math.round((sumNow / sumBase) * 1000) / 10 : 100,
+        thisWeek: date >= monday,
+        best: bestEx.v ? `${bestEx.name}: 1RM ${Math.round(bestEx.v)} kg` : "",
+      };
+    });
+    const movers = Object.keys(last)
+      .filter((id) => first[id].v !== last[id].v)
+      .map((id) => ({ name: last[id].name, from: Math.round(first[id].v), to: Math.round(last[id].v) }))
+      .sort((a, b) => Math.abs(b.to - b.from) - Math.abs(a.to - a.from))
+      .slice(0, 3);
+    out.push({
+      key: k,
+      label: CATEGORY_LABEL[k],
+      sessions,
+      change: Math.round((sessions[sessions.length - 1].index - 100) * 10) / 10,
+      movers,
+    });
+  }
+  return out;
 }

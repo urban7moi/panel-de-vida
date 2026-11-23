@@ -1,6 +1,6 @@
 // Ajustes del usuario: objetivos y semana de entreno. Se usan en el móvil y en el servidor.
 
-export type DayPlan = "push" | "pull" | "rehab" | "rest";
+export type DayPlan = "push" | "pull" | "legs" | "rehab" | "rest";
 
 export type Settings = {
   weight: number; // kg
@@ -42,13 +42,14 @@ export function withDefaults(s: Partial<Settings> | null | undefined): Settings 
 export const PLAN_INFO: Record<DayPlan, { label: string; title: string; detail: string }> = {
   push: { label: "Push", title: "Entreno · Push", detail: "Pecho, hombro y tríceps" },
   pull: { label: "Pull", title: "Entreno · Pull", detail: "Espalda y bíceps" },
+  legs: { label: "Pierna", title: "Entreno · Pierna", detail: "Cuádriceps, femoral y glúteo" },
   rehab: { label: "Rodilla", title: "Rehabilitación de rodilla", detail: "Ejercicios del fisio" },
   rest: { label: "Descanso", title: "Descanso", detail: "" },
 };
 
 /** Plan de un día de la semana (0 = domingo). */
 export const planForWeekday = (s: Settings, weekday: number): DayPlan => s.schedule[String(weekday)] ?? "rest";
-export const isGymPlan = (p: DayPlan) => p === "push" || p === "pull";
+export const isGymPlan = (p: DayPlan) => p === "push" || p === "pull" || p === "legs";
 
 const round5 = (n: number) => Math.round(n / 5) * 5;
 
