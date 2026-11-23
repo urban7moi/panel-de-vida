@@ -6,7 +6,7 @@ import { CalendarIcon, CheckIcon, SunIcon } from "./icons";
 import Stars from "./Stars";
 import CalendarFull from "./CalendarFull";
 import { useStored } from "@/lib/useStored";
-import { addDays, agendaFor, dateFromKey, dateKey, DOW, sortTasks, TZ, workoutFor, type Task } from "@/lib/agenda";
+import { addDays, agendaFor, dateFromKey, dateKey, DOW, repeatLabel, sortTasks, tasksOn, TZ, workoutFor, type RecurringTask, type Repeat, type Task } from "@/lib/agenda";
 import { useSettings } from "@/lib/useSettings";
 
 
@@ -48,7 +48,10 @@ export default function HoyScreen() {
 
   // --- Tareas: se guardan por día en este iPhone ---
   const [allTasks, setAllTasks] = useStored<Record<string, Task[]>>("tareas-v3", {});
-  const dayTasks = (activeDay && allTasks[activeDay]) || [];
+  const [recurring, setRecurring] = useStored<RecurringTask[]>("tareas-recurrentes", []);
+  const [doneRec, setDoneRec] = useStored<Record<string, string[]>>("recurrentes-hechas", {});
+  const getTasks = useCallback((key: string) => tasksOn(key, allTasks, recurring, doneRec), [allTasks, recurring, doneRec]);
+  const dayTasks = activeDay ? getTasks(activeDay) : [];
   const setTasksOf = (day: string, fn: (ts: Task[]) => Task[]) =>
     setAllTasks((all) => ({ ...all, [day]: fn(all[day] ?? []) }));
   const setDayTasks = (fn: (ts: Task[]) => Task[]) => activeDay && setTasksOf(activeDay, fn);
@@ -57,35 +60,97 @@ export default function HoyScreen() {
   const important = dayTasks.filter((t) => !t.done && t.stars >= 4).length;
 
   const [sheet, setSheet] = useState(false);
-  const [form, setForm] = useState({ title: "", time: "", stars: 3, date: "", editId: "" });
+  type RepeatChoice = "none" | "daily" | "weekdays" | "weekly" | "monthly";
+  const [form, setForm] = useState({ title: "", time: "", stars: 3, date: "", editId: "", repeat: "none" as RepeatChoice, days: [] as number[] });
   function openAdd(date: string, time = "") {
-    setForm({ title: "", time, stars: 3, date, editId: "" });
+    setForm({ title: "", time, stars: 3, date, editId: "", repeat: "none", days: [dateFromKey(date).getDay()] });
     setSheet(true);
   }
   function openEdit(date: string, t: Task) {
-    setForm({ title: t.title, time: t.time, stars: t.stars, date, editId: t.id });
+    const rec = t.id.startsWith("r:") ? recurring.find((r) => r.id === t.id.slice(2)) : undefined;
+    setForm({
+      title: t.title,
+      time: t.time,
+      stars: t.stars,
+      date,
+      editId: t.id,
+      repeat: rec ? rec.repeat.kind : "none",
+      days: rec?.repeat.kind === "weekly" ? rec.repeat.days : [dateFromKey(date).getDay()],
+    });
     setSheet(true);
   }
+  const repeatOf = (f: typeof form): Repeat | null =>
+    f.repeat === "none"
+      ? null
+      : f.repeat === "weekly"
+        ? { kind: "weekly", days: f.days.length ? f.days : [dateFromKey(f.date).getDay()] }
+        : f.repeat === "monthly"
+          ? { kind: "monthly", day: dateFromKey(f.date).getDate() }
+          : { kind: f.repeat };
 
   function addTask(e: React.FormEvent) {
     e.preventDefault();
     const title = form.title.trim();
     const day = form.date || activeDay;
     if (!title || !day) return;
-    if (form.editId) {
-      setTasksOf(day, (ts) => ts.map((t) => (t.id === form.editId ? { ...t, title, time: form.time, stars: form.stars } : t)));
+    const repeat = repeatOf({ ...form, date: day });
+    const editingRec = form.editId.startsWith("r:") ? form.editId.slice(2) : null;
+    if (editingRec) {
+      if (repeat) {
+        setRecurring((rs) => rs.map((r) => (r.id === editingRec ? { ...r, title, time: form.time, stars: form.stars, repeat } : r)));
+      } else {
+        // Deja de repetirse: se queda como tarea suelta de ese día.
+        setRecurring((rs) => rs.filter((r) => r.id !== editingRec));
+        setTasksOf(day, (ts) => [...ts, { id: crypto.randomUUID(), title, time: form.time, stars: form.stars, done: false }]);
+      }
+    } else if (form.editId) {
+      if (repeat) {
+        setTasksOf(day, (ts) => ts.filter((t) => t.id !== form.editId));
+        setRecurring((rs) => [...rs, { id: crypto.randomUUID(), title, time: form.time, stars: form.stars, repeat, from: day, skips: [] }]);
+      } else {
+        setTasksOf(day, (ts) => ts.map((t) => (t.id === form.editId ? { ...t, title, time: form.time, stars: form.stars } : t)));
+      }
+    } else if (repeat) {
+      setRecurring((rs) => [...rs, { id: crypto.randomUUID(), title, time: form.time, stars: form.stars, repeat, from: day, skips: [] }]);
     } else {
       setTasksOf(day, (ts) => [...ts, { id: crypto.randomUUID(), title, time: form.time, stars: form.stars, done: false }]);
     }
     setSheet(false);
   }
-  function deleteEditing() {
+  function deleteEditing(onlyThisDay = false) {
     const day = form.date || activeDay;
-    if (day && form.editId) setTasksOf(day, (ts) => ts.filter((t) => t.id !== form.editId));
+    if (!day || !form.editId) return;
+    if (form.editId.startsWith("r:")) {
+      const id = form.editId.slice(2);
+      if (onlyThisDay) setRecurring((rs) => rs.map((r) => (r.id === id ? { ...r, skips: [...r.skips, day] } : r)));
+      else setRecurring((rs) => rs.filter((r) => r.id !== id));
+    } else {
+      setTasksOf(day, (ts) => ts.filter((t) => t.id !== form.editId));
+    }
     setSheet(false);
   }
-  const toggleTask = (id: string) => setDayTasks((ts) => ts.map((x) => (x.id === id ? { ...x, done: !x.done } : x)));
-  const removeTask = (id: string) => setDayTasks((ts) => ts.filter((x) => x.id !== id));
+  const toggleTask = (id: string) => {
+    if (!activeDay) return;
+    if (id.startsWith("r:")) {
+      const rid = id.slice(2);
+      setDoneRec((all) => {
+        const cur = new Set(all[activeDay] ?? []);
+        if (cur.has(rid)) cur.delete(rid);
+        else cur.add(rid);
+        return { ...all, [activeDay]: [...cur] };
+      });
+    } else {
+      setDayTasks((ts) => ts.map((x) => (x.id === id ? { ...x, done: !x.done } : x)));
+    }
+  };
+  const removeTask = (id: string) => {
+    if (id.startsWith("r:") && activeDay) {
+      // Quitar de la lista una tarea repetida = saltarla solo ese día.
+      setRecurring((rs) => rs.map((r) => (r.id === id.slice(2) ? { ...r, skips: [...r.skips, activeDay] } : r)));
+    } else {
+      setDayTasks((ts) => ts.filter((x) => x.id !== id));
+    }
+  };
 
   // --- Lo que quedó pendiente ayer ---
   const yesterday = today ? addDays(today, -1) : null;
@@ -246,7 +311,7 @@ export default function HoyScreen() {
             >
               <span className="day-dow">{d.date.getDate() === 1 ? d.date.toLocaleDateString("es-ES", { month: "short" }).replace(".", "") : d.dow}</span>
               <span className="day-num">{d.date.getDate()}</span>
-              {d.key !== activeDay && (allTasks[d.key]?.length ?? 0) > 0 && <span className="day-dot" aria-hidden="true" />}
+              {d.key !== activeDay && getTasks(d.key).length > 0 && <span className="day-dot" aria-hidden="true" />}
             </button>
           ))}
         </div>
@@ -323,7 +388,10 @@ export default function HoyScreen() {
                 <span className="task-time">{t.time || "—"}</span>
                 <button type="button" className="grow task-edit" onClick={() => activeDay && openEdit(activeDay, t)} aria-label={`Editar ${t.title}`}>
                   <span className={t.done ? "task-title done" : "task-title"}>{t.title}</span>
-                  <Stars n={t.stars} />
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <Stars n={t.stars} />
+                    {t.repeat && <span className="repeat-tag">↻ {t.repeat}</span>}
+                  </span>
                 </button>
                 <button type="button" className="icon-btn" aria-label={`Borrar ${t.title}`} onClick={() => removeTask(t.id)}>×</button>
               </div>
@@ -347,7 +415,7 @@ export default function HoyScreen() {
             scrollToDay(key, false);
           }}
           onClose={() => setFullCal(false)}
-          tasksByDay={allTasks}
+          getTasks={getTasks}
           settings={settings}
           workoutTimeFor={workoutTimeFor}
           onAdd={(date, time) => openAdd(date, time)}
@@ -428,9 +496,46 @@ export default function HoyScreen() {
                 ))}
               </div>
             </fieldset>
+            <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+              <legend style={{ marginBottom: 6 }}>Repetir</legend>
+              <div className="chips" role="radiogroup" aria-label="Repetir">
+                {([["none", "Nunca"], ["daily", "Cada día"], ["weekdays", "L a V"], ["weekly", "Días…"], ["monthly", "Cada mes"]] as const).map(([k, label]) => (
+                  <button key={k} type="button" role="radio" aria-checked={form.repeat === k} className="chip-btn plan-chip" onClick={() => setForm({ ...form, repeat: k })}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {form.repeat === "weekly" && (
+                <div className="chips" style={{ marginTop: 8 }} aria-label="Días de la semana">
+                  {[1, 2, 3, 4, 5, 6, 0].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={form.days.includes(d)}
+                      className="chip-btn plan-chip"
+                      style={{ minWidth: 40 }}
+                      onClick={() => setForm({ ...form, days: form.days.includes(d) ? form.days.filter((x) => x !== d) : [...form.days, d] })}
+                    >
+                      {["D", "L", "M", "X", "J", "V", "S"][d]}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {form.repeat !== "none" && form.date && (
+                <span className="tiny muted" style={{ marginTop: 6, display: "block" }}>{repeatLabel(repeatOf(form)!)}</span>
+              )}
+            </fieldset>
+            {form.editId.startsWith("r:") && (
+              <button type="button" className="link-btn" style={{ alignSelf: "flex-start" }} onClick={() => deleteEditing(true)}>
+                Quitar solo este día
+              </button>
+            )}
             <div style={{ display: "flex", gap: 10 }}>
               {form.editId ? (
-                <button type="button" className="btn-secondary danger" onClick={deleteEditing}>Borrar</button>
+                <button type="button" className="btn-secondary danger" onClick={() => deleteEditing(false)}>
+                  {form.editId.startsWith("r:") ? "Borrar serie" : "Borrar"}
+                </button>
               ) : (
                 <button type="button" className="btn-secondary" onClick={() => setSheet(false)}>Cancelar</button>
               )}

@@ -2,12 +2,57 @@
 import { PLAN_INFO, planForWeekday, type Settings } from "./settings";
 
 export type Task = {
-  id: string;
+  id: string; // las que se repiten empiezan por "r:"
   title: string;
   time: string; // "HH:MM" o ""
   stars: number; // 1-5
   done: boolean;
+  repeat?: string; // texto ("Cada día") si es una tarea que se repite
 };
+
+/** Tarea que se repite. */
+export type Repeat = { kind: "daily" } | { kind: "weekdays" } | { kind: "weekly"; days: number[] } | { kind: "monthly"; day: number };
+export type RecurringTask = { id: string; title: string; time: string; stars: number; repeat: Repeat; from: string; skips: string[] };
+
+const DAY_SHORT = ["D", "L", "M", "X", "J", "V", "S"];
+export function repeatLabel(r: Repeat) {
+  if (r.kind === "daily") return "Cada día";
+  if (r.kind === "weekdays") return "De lunes a viernes";
+  if (r.kind === "monthly") return `Cada mes, el día ${r.day}`;
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  return `Cada ${order.filter((d) => r.days.includes(d)).map((d) => DAY_SHORT[d]).join(", ")}`;
+}
+
+/** ¿Toca esta tarea repetida ese día? */
+export function occursOn(t: RecurringTask, key: string) {
+  if (key < t.from || t.skips.includes(key)) return false;
+  const d = dateFromKey(key);
+  const wd = d.getDay();
+  switch (t.repeat.kind) {
+    case "daily":
+      return true;
+    case "weekdays":
+      return wd >= 1 && wd <= 5;
+    case "weekly":
+      return t.repeat.days.includes(wd);
+    case "monthly": {
+      // Si el mes no tiene ese día (p. ej. 31), toca el último día del mes.
+      const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      return d.getDate() === Math.min(t.repeat.day, last);
+    }
+  }
+}
+
+/** Tareas de un día: las sueltas más las que se repiten (con su estado de hecha ese día). */
+export function tasksOn(key: string, single: Record<string, Task[]>, recurring: RecurringTask[], doneRec: Record<string, string[]>): Task[] {
+  const done = new Set(doneRec[key] ?? []);
+  return [
+    ...(single[key] ?? []),
+    ...recurring
+      .filter((r) => occursOn(r, key))
+      .map((r) => ({ id: `r:${r.id}`, title: r.title, time: r.time, stars: r.stars, done: done.has(r.id), repeat: repeatLabel(r.repeat) })),
+  ];
+}
 
 export type AgendaItem =
   | { kind: "workout"; time: string; title: string; detail: string }

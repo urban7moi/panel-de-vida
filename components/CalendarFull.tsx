@@ -21,7 +21,7 @@ type Props = {
   selected: string;
   onSelect: (key: string) => void;
   onClose: () => void;
-  tasksByDay: Record<string, Task[]>;
+  getTasks: (key: string) => Task[];
   settings: Settings;
   workoutTimeFor: (key: string) => string;
   onAdd: (date: string, time: string) => void;
@@ -33,7 +33,7 @@ const FIRST_HOUR = 6;
 const LAST_HOUR = 24;
 
 /** Calendario a pantalla completa, al estilo del iPhone: vista Mes y vista Semana. */
-export default function CalendarFull({ today, selected, onSelect, onClose, tasksByDay, settings, workoutTimeFor, onAdd, onEditWorkout }: Props) {
+export default function CalendarFull({ today, selected, onSelect, onClose, getTasks, settings, workoutTimeFor, onAdd, onEditWorkout }: Props) {
   const [view, setView] = useState<"mes" | "semana">("mes");
   const [month, setMonth] = useState(() => selected.slice(0, 7)); // "2026-11"
   const [weekStart, setWeekStart] = useState(() => mondayOf(selected));
@@ -95,7 +95,7 @@ export default function CalendarFull({ today, selected, onSelect, onClose, tasks
 
   const selectedDate = dateFromKey(selected);
   const selectedLabel = cap(selectedDate.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" }));
-  const agenda = agendaFor(selected, tasksByDay[selected] ?? [], workoutTimeFor(selected), settings);
+  const agenda = agendaFor(selected, getTasks(selected), workoutTimeFor(selected), settings);
 
   return (
     <div className="fullcal" role="dialog" aria-modal="true" aria-labelledby="h-fullcal">
@@ -134,7 +134,7 @@ export default function CalendarFull({ today, selected, onSelect, onClose, tasks
             {monthDays.map((key) => {
               const d = dateFromKey(key);
               const out = key.slice(0, 7) !== month;
-              const hasTasks = (tasksByDay[key]?.length ?? 0) > 0;
+              const hasTasks = getTasks(key).length > 0;
               return (
                 <button
                   key={key}
@@ -196,7 +196,7 @@ export default function CalendarFull({ today, selected, onSelect, onClose, tasks
             <span className="wk-gutter" />
             {weekDays.map((key, i) => {
               const d = dateFromKey(key);
-              const untimed = (tasksByDay[key] ?? []).filter((t) => !t.time).length;
+              const untimed = getTasks(key).filter((t) => !t.time).length;
               return (
                 <button
                   key={key}
@@ -226,7 +226,7 @@ export default function CalendarFull({ today, selected, onSelect, onClose, tasks
                   dayKey={key}
                   isToday={key === today}
                   nowMin={nowMin}
-                  tasks={tasksByDay[key] ?? []}
+                  tasks={getTasks(key)}
                   workoutTime={workoutTimeFor(key)}
                   settings={settings}
                   onEmpty={(time) => {
