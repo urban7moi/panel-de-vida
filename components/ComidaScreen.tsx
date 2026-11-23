@@ -10,7 +10,7 @@ import { useStored } from "@/lib/useStored";
 import { shrinkImage } from "@/lib/image";
 import { addDays, dateFromKey, dateKey, TZ } from "@/lib/agenda";
 import { useSettings } from "@/lib/useSettings";
-import { goalsFor as goalsOf, isGymPlan, planForWeekday } from "@/lib/settings";
+import { goalsFor as goalsOf, isGymPlan, PLAN_INFO, planForWeekday } from "@/lib/settings";
 
 type MealType = "desayuno" | "comida" | "merienda" | "cena" | "snack";
 type Meal = { id: string; name: string; kcal: number; p: number; c: number; g: number; type: MealType; time: string };
@@ -200,6 +200,9 @@ export default function ComidaScreen() {
           goals: { kcal: kGoal, p: goals.p, c: goals.c, g: goals.g },
           eaten: meals.map((m) => ({ name: m.name, type: m.type, kcal: m.kcal, p: m.p })),
           favorites: favs.map((f) => f.name),
+          profile: `Pesa ${settings.weight} kg. Entrena a las ${settings.workoutTime}. Semana: ${[1, 2, 3, 4, 5, 6, 0]
+            .map((d) => `${["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"][d]} ${PLAN_INFO[planForWeekday(settings, d)].label}`)
+            .join(", ")}.`,
         }),
       });
       const json = await res.json().catch(() => ({ error: "Respuesta no válida del servidor." }));
