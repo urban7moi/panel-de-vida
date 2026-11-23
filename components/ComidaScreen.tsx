@@ -11,6 +11,8 @@ type MealType = "desayuno" | "comida" | "merienda" | "cena" | "snack";
 type Meal = { id: string; name: string; kcal: number; p: number; c: number; g: number; type: MealType; time: string };
 type Fav = { name: string; kcal: number; p: number; c: number; g: number };
 type Estimate = { name: string; kcal: number; p: number; c: number; g: number; confidence: string; notes: string };
+type Idea = { type: MealType; name: string; portion: string; kcal: number; p: number; c: number; g: number; why: string };
+type NutriPlan = { summary: string; ideas: Idea[]; basedOn: string; added: number[] };
 
 const TYPES: { key: MealType; label: string }[] = [
   { key: "desayuno", label: "Desayuno" },
@@ -143,9 +145,9 @@ export default function ComidaScreen() {
 
   const formKcal = form.kcal.trim() ? toNum(form.kcal) : kcalOf(toNum(form.p), toNum(form.c), toNum(form.g));
 
-  function pushMeal(m: Omit<Meal, "id" | "time" | "type">) {
+  function pushMeal(m: Omit<Meal, "id" | "time" | "type">, mealType: MealType = type) {
     if (!active) return;
-    const meal: Meal = { ...m, id: crypto.randomUUID(), type, time: active === today ? nowHHMM() : "" };
+    const meal: Meal = { ...m, id: crypto.randomUUID(), type: mealType, time: active === today ? nowHHMM() : "" };
     setAllMeals((all) => ({ ...all, [active]: [...(all[active] ?? []), meal] }));
   }
 
@@ -171,6 +173,52 @@ export default function ComidaScreen() {
   }
   const removeMeal = (id: string) => active && setAllMeals((all) => ({ ...all, [active]: (all[active] ?? []).filter((m) => m.id !== id) }));
   const isFav = (name: string) => favs.some((f) => f.name.toLowerCase() === name.toLowerCase());
+
+  // --- Tu nutricionista ---
+  const [plans, setPlans] = useStored<Record<string, NutriPlan>>("nutri-planes", {});
+  const plan = active ? plans[active] : undefined;
+  const signature = `${meals.length}-${eaten.kcal}`;
+  const [nutriLoading, setNutriLoading] = useState(false);
+  const [nutriError, setNutriError] = useState("");
+  async function askNutri() {
+    if (!active) return;
+    setNutriLoading(true);
+    setNutriError("");
+    try {
+      const res = await fetch("/api/nutri", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          hour: active === today ? nowHHMM() : "09:00",
+          gymDay: isGymDay(active),
+          remaining: { kcal: kGoal - eaten.kcal, p: goals.p - eaten.p, c: goals.c - eaten.c, g: goals.g - eaten.g },
+          goals: { kcal: kGoal, p: goals.p, c: goals.c, g: goals.g },
+          eaten: meals.map((m) => ({ name: m.name, type: m.type, kcal: m.kcal, p: m.p })),
+          favorites: favs.map((f) => f.name),
+        }),
+      });
+      const json = await res.json().catch(() => ({ error: "Respuesta no válida del servidor." }));
+      if (!res.ok) throw new Error(json.error ?? "No se pudieron preparar las recomendaciones.");
+      const day = active;
+      setPlans((all) => {
+        // Solo se guardan los últimos 7 días.
+        const keep = Object.fromEntries(Object.entries(all).filter(([k]) => k >= addDays(day, -7)));
+        return { ...keep, [day]: { summary: json.summary, ideas: json.ideas, basedOn: signature, added: [] } };
+      });
+    } catch (err) {
+      setNutriError(err instanceof Error ? err.message : "No se pudieron preparar las recomendaciones.");
+    } finally {
+      setNutriLoading(false);
+    }
+  }
+  function addIdea(i: number) {
+    if (!active || !plan) return;
+    const idea = plan.ideas[i];
+    pushMeal({ name: idea.name, kcal: idea.kcal, p: idea.p, c: idea.c, g: idea.g }, idea.type);
+    setPlans((all) => ({ ...all, [active]: { ...plan, added: [...plan.added, i], basedOn: `${meals.length + 1}-${eaten.kcal + idea.kcal}` } }));
+    setToast(`${idea.name} añadido · ${idea.kcal} kcal`);
+  }
+  const planStale = !!plan && plan.basedOn !== signature;
 
   // --- Agua ---
   const glasses = (active && water[active]) || 0;
@@ -249,6 +297,56 @@ export default function ComidaScreen() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Tu nutricionista */}
+      <section className="section" aria-labelledby="h-nutri">
+        <div className="section-head">
+          <h2 id="h-nutri" className="section-title">Tu nutricionista</h2>
+          <span className="small muted">{Math.max(0, goals.p - eaten.p)} g de proteína por cubrir</span>
+        </div>
+        {nutriLoading ? (
+          <div className="card nutri-loading" role="status" aria-live="polite">
+            <span className="spinner" aria-hidden="true" />
+            <span style={{ fontSize: 16, fontWeight: 600 }}>Preparando tus recomendaciones</span>
+            <span className="small muted">Mirando lo que llevas hoy y lo que te falta…</span>
+          </div>
+        ) : !plan ? (
+          <div className="card" style={{ gap: 12 }}>
+            <p className="small muted" style={{ margin: 0, lineHeight: 1.5 }}>
+              Te propongo 3 comidas para llegar a tu proteína sin pasarte de calorías, según lo que ya has comido hoy.
+            </p>
+            <button type="button" className="btn-primary" onClick={askNutri}>Recomiéndame qué comer</button>
+          </div>
+        ) : (
+          <>
+            <div className="card nutri-summary">
+              <span style={{ fontSize: 15, lineHeight: 1.45 }}>{plan.summary}</span>
+              {planStale && <span className="tiny" style={{ color: "var(--accent-text)" }}>Has apuntado comidas desde estas ideas: actualízalas para que cuadren.</span>}
+            </div>
+            {plan.ideas.map((idea, i) => {
+              const added = plan.added.includes(i);
+              return (
+                <article className="coach-card" key={i}>
+                  <span className="chip" style={{ alignSelf: "flex-start" }}>{TYPES.find((t) => t.key === idea.type)?.label ?? idea.type}</span>
+                  <span style={{ fontSize: 17, fontWeight: 600, lineHeight: 1.3 }}>{idea.name}</span>
+                  <span className="small" style={{ lineHeight: 1.45 }}>{idea.portion}</span>
+                  <div className="idea-macros">
+                    <span><strong>{idea.p} g</strong> prot.</span>
+                    <span>{idea.kcal} kcal</span>
+                    <span>{idea.c} C · {idea.g} G</span>
+                  </div>
+                  <span className="tip-body">{idea.why}</span>
+                  <button type="button" className={added ? "btn-secondary" : "btn-primary"} style={{ minHeight: 44, fontSize: 15 }} disabled={added} onClick={() => addIdea(i)}>
+                    {added ? "Añadida ✓" : `Añadir a ${(TYPES.find((t) => t.key === idea.type)?.label ?? "comida").toLowerCase()}`}
+                  </button>
+                </article>
+              );
+            })}
+            <button type="button" className="add-btn" onClick={askNutri}>{planStale ? "Actualizar recomendaciones" : "Otras ideas"}</button>
+          </>
+        )}
+        {nutriError && <p className="error" role="alert" style={{ margin: 0, fontSize: 13 }}>{nutriError}</p>}
       </section>
 
       {/* Añadir comida */}
