@@ -1,7 +1,7 @@
 // Service worker: la app abre al instante y aguanta sin cobertura.
 // - Archivos estáticos (JS, CSS, iconos, fuentes): de la caché y, si no están, de la red.
 // - Pantallas: siempre de la red; si no hay conexión, la última versión guardada.
-const CACHE = "panel-v4";
+const CACHE = "panel-v5";
 const PAGES = "panel-pages-v1";
 
 self.addEventListener("install", () => self.skipWaiting());
@@ -48,5 +48,39 @@ self.addEventListener("fetch", (event) => {
           return res;
         }),
     ),
+  );
+});
+
+// --- Notificaciones ---
+self.addEventListener("push", (event) => {
+  let data = { title: "moi.", body: "", url: "/" };
+  try {
+    data = { ...data, ...event.data.json() };
+  } catch {
+    /* sin datos */
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/logo-m-192.png",
+      badge: "/logo-m-192.png",
+      data: { url: data.url },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ("focus" in c) {
+          c.navigate(url);
+          return c.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    }),
   );
 });
