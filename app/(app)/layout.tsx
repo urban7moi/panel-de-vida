@@ -1,4 +1,5 @@
 import TabBar from "@/components/TabBar";
+import RefreshOnReturn from "@/components/RefreshOnReturn";
 import { requireAuth } from "@/lib/requireAuth";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +10,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <>
       {children}
       <TabBar />
+      <RefreshOnReturn />
     </>
   );
 }

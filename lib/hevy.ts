@@ -51,11 +51,14 @@ export function hevyConfigured() {
   return !!process.env.HEVY_API_KEY?.trim();
 }
 
-async function hevyGet<T>(path: string): Promise<T> {
+async function hevyGet<T>(path: string, fresh = false): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "api-key": process.env.HEVY_API_KEY!.trim(), accept: "application/json" },
+    // Entrenos siempre al momento (para que el último aparezca nada más terminarlo);
+    // las rutinas cambian poco y se guardan 2 minutos.
+    ...(fresh ? { cache: "no-store" as const } : {}),
     // Cache de 2 minutos: la pantalla carga rápido y no gastamos el límite de peticiones.
-    next: { revalidate: 120 },
+    ...(fresh ? {} : { next: { revalidate: 120 } }),
   });
   if (!res.ok) throw new HevyError(`Hevy ${res.status} en ${path}`, res.status);
   return (await res.json()) as T;
@@ -76,7 +79,7 @@ export async function getRoutines(): Promise<HevyRoutine[]> {
 export async function getRecentWorkouts(days = 90): Promise<HevyWorkout[]> {
   const since = Date.now() - days * 24 * 3600_000;
   type Page = { page_count: number; workouts: HevyWorkout[] };
-  const get = (page: number) => hevyGet<Page>(`/v1/workouts?page=${page}&pageSize=10`);
+  const get = (page: number) => hevyGet<Page>(`/v1/workouts?page=${page}&pageSize=10`, true);
   const old = (p: Page) => {
     const last = p.workouts.at(-1);
     return !last || new Date(last.start_time).getTime() < since;
