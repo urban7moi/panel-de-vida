@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import Macros from "@/components/entreno/Macros";
 import Progress from "@/components/entreno/Progress";
 import TodayCard from "@/components/entreno/TodayCard";
 import Coach from "@/components/entreno/Coach";
@@ -26,8 +25,6 @@ export default function Page() {
       <Suspense fallback={<div className="skeleton" style={{ height: 330 }} />}>
         <TodaySection />
       </Suspense>
-
-      <Macros />
 
       <Suspense fallback={<SectionSkeleton title="Progreso" height={420} />}>
         <ProgressSection />

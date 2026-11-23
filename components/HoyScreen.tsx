@@ -5,10 +5,8 @@ import { CalendarIcon, CheckIcon, SunIcon } from "./icons";
 import Stars from "./Stars";
 import CalendarFull from "./CalendarFull";
 import { useStored } from "@/lib/useStored";
-import { agendaFor, dateFromKey, dateKey, DOW, sortTasks, TZ, WORKOUT_TIME, workoutFor, type Task } from "@/lib/agenda";
+import { addDays, agendaFor, dateFromKey, dateKey, DOW, sortTasks, TZ, WORKOUT_TIME, workoutFor, type Task } from "@/lib/agenda";
 
-type Mail = { id: string; from: string; initials: string; subject: string; preview: string; time: string; day: "hoy" | "ayer"; unread: boolean };
-type MailState = { status: "cargando" | "ok" | "error" | "sin-configurar"; mails: Mail[]; unreadTotal?: number; error?: string };
 
 export default function HoyScreen() {
   const [now, setNow] = useState<Date | null>(null);
@@ -55,9 +53,13 @@ export default function HoyScreen() {
   const important = dayTasks.filter((t) => !t.done && t.stars >= 4).length;
 
   const [sheet, setSheet] = useState(false);
-  const [form, setForm] = useState({ title: "", time: "", stars: 3, date: "" });
+  const [form, setForm] = useState({ title: "", time: "", stars: 3, date: "", editId: "" });
   function openAdd(date: string, time = "") {
-    setForm({ title: "", time, stars: 3, date });
+    setForm({ title: "", time, stars: 3, date, editId: "" });
+    setSheet(true);
+  }
+  function openEdit(date: string, t: Task) {
+    setForm({ title: t.title, time: t.time, stars: t.stars, date, editId: t.id });
     setSheet(true);
   }
 
@@ -66,11 +68,32 @@ export default function HoyScreen() {
     const title = form.title.trim();
     const day = form.date || activeDay;
     if (!title || !day) return;
-    setTasksOf(day, (ts) => [...ts, { id: crypto.randomUUID(), title, time: form.time, stars: form.stars, done: false }]);
+    if (form.editId) {
+      setTasksOf(day, (ts) => ts.map((t) => (t.id === form.editId ? { ...t, title, time: form.time, stars: form.stars } : t)));
+    } else {
+      setTasksOf(day, (ts) => [...ts, { id: crypto.randomUUID(), title, time: form.time, stars: form.stars, done: false }]);
+    }
+    setSheet(false);
+  }
+  function deleteEditing() {
+    const day = form.date || activeDay;
+    if (day && form.editId) setTasksOf(day, (ts) => ts.filter((t) => t.id !== form.editId));
     setSheet(false);
   }
   const toggleTask = (id: string) => setDayTasks((ts) => ts.map((x) => (x.id === id ? { ...x, done: !x.done } : x)));
   const removeTask = (id: string) => setDayTasks((ts) => ts.filter((x) => x.id !== id));
+
+  // --- Lo que quedó pendiente ayer ---
+  const yesterday = today ? addDays(today, -1) : null;
+  const leftovers = yesterday ? (allTasks[yesterday] ?? []).filter((t) => !t.done) : [];
+  function moveLeftoversToToday() {
+    if (!today || !yesterday) return;
+    setAllTasks((all) => ({
+      ...all,
+      [yesterday]: (all[yesterday] ?? []).filter((t) => t.done),
+      [today]: [...(all[today] ?? []), ...leftovers.map((t) => ({ ...t, id: crypto.randomUUID() }))],
+    }));
+  }
 
   // --- Hora del entreno: las 12:00 salvo que la cambies para un día concreto ---
   const [workoutTimes, setWorkoutTimes] = useStored<Record<string, string>>("entreno-horas", {});
@@ -97,36 +120,6 @@ export default function HoyScreen() {
   const activeDate = activeDay ? dateFromKey(activeDay) : now;
   const workout = activeDay ? workoutFor(activeDay) : undefined;
   const agenda = activeDay ? agendaFor(activeDay, dayTasks, workoutTime) : [];
-
-  // --- Emails ---
-  const [mail, setMail] = useState<MailState>({ status: "cargando", mails: [] });
-  useEffect(() => {
-    // Enseña al momento los últimos emails guardados y los actualiza por detrás.
-    let hadCache = false;
-    try {
-      const cached = localStorage.getItem("mail-cache-v2");
-      if (cached) {
-        setMail(JSON.parse(cached));
-        hadCache = true;
-      }
-    } catch {
-      /* sin caché */
-    }
-    fetch("/api/mail")
-      .then((r) => r.json())
-      .then((j) => {
-        const next: MailState = { status: j.status ?? "error", mails: j.mails ?? [], unreadTotal: j.unreadTotal ?? 0, error: j.error };
-        if (next.status === "error" && hadCache) return; // mejor lo último bueno que un error pasajero
-        setMail(next);
-        try {
-          if (next.status === "ok") localStorage.setItem("mail-cache-v2", JSON.stringify(next));
-        } catch {
-          /* sin espacio */
-        }
-      })
-      .catch(() => !hadCache && setMail({ status: "error", mails: [], error: "No se pudo conectar con tu correo." }));
-  }, []);
-  const unread = mail.unreadTotal ?? 0;
 
   // --- Resumen ---
   const isToday = activeDay === today;
@@ -160,6 +153,8 @@ export default function HoyScreen() {
           )}
           {dayTasks.length === 0 ? (
             <>No hay tareas apuntadas.</>
+          ) : doneCount === dayTasks.length ? (
+            <>Has terminado <strong>todas las tareas</strong>.</>
           ) : (
             <>
               Quedan <strong>{dayTasks.length - doneCount} {dayTasks.length - doneCount === 1 ? "tarea" : "tareas"}</strong>
@@ -167,10 +162,18 @@ export default function HoyScreen() {
               {nextTask && <> La próxima: {nextTask.title} a las {nextTask.time}.</>}
             </>
           )}
-          {isToday && mail.status === "ok" && unread > 0 && (
-            <> Tienes <strong>{unread} {unread === 1 ? "email sin leer" : "emails sin leer"}</strong>.</>
-          )}
         </p>
+        {dayTasks.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+              <span className="muted">Progreso del día</span>
+              <span><strong>{doneCount}</strong> <span className="muted">de {dayTasks.length} hechas</span></span>
+            </div>
+            <div className="bar-track" role="img" aria-label={`${doneCount} de ${dayTasks.length} tareas hechas`}>
+              <div className="bar-fill" style={{ width: `${Math.round((doneCount / dayTasks.length) * 100)}%`, transition: "width 0.3s ease" }} />
+            </div>
+          </div>
+        )}
         <div className="tiles">
           <div className="tile">
             <span className="tile-value">{agenda.filter((i) => i.time).length}</span>
@@ -186,6 +189,20 @@ export default function HoyScreen() {
           </div>
         </div>
       </section>
+
+      {isToday && leftovers.length > 0 && (
+        <section className="card leftovers" aria-label="Tareas pendientes de ayer">
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 16, fontWeight: 600 }}>
+              Te {leftovers.length === 1 ? "quedó 1 tarea" : `quedaron ${leftovers.length} tareas`} de ayer
+            </span>
+            <span className="small muted ellipsis">{leftovers.map((t) => t.title).join(" · ")}</span>
+          </div>
+          <button type="button" className="btn-primary" style={{ minHeight: 44, fontSize: 15 }} onClick={moveLeftoversToToday}>
+            Pasar a hoy
+          </button>
+        </section>
+      )}
 
       {/* Calendario: agenda del día con el entreno y las tareas */}
       <section className="section" aria-labelledby="h-cal">
@@ -252,7 +269,13 @@ export default function HoyScreen() {
                   <span className="tiny" style={{ color: "var(--google)", flexShrink: 0 }}>Cambiar hora</span>
                 </button>
               ) : (
-                <div className="row" key={item.task.id}>
+                <button
+                  type="button"
+                  className="row row-btn"
+                  key={item.task.id}
+                  onClick={() => activeDay && openEdit(activeDay, item.task)}
+                  aria-label={`Editar ${item.task.title}`}
+                >
                   <div className="time-col">
                     <span style={{ fontSize: 15, fontWeight: 600 }}>{item.time || "—"}</span>
                   </div>
@@ -261,7 +284,7 @@ export default function HoyScreen() {
                     <span className={item.task.done ? "task-title done" : "task-title"} style={{ fontSize: 16 }}>{item.task.title}</span>
                     <Stars n={item.task.stars} size={12} />
                   </div>
-                </div>
+                </button>
               ),
             )}
           </div>
@@ -293,12 +316,10 @@ export default function HoyScreen() {
                   <span className="check" aria-hidden="true">{t.done && <CheckIcon size={14} />}</span>
                 </label>
                 <span className="task-time">{t.time || "—"}</span>
-                <span className="grow" style={{ gap: 4 }}>
+                <button type="button" className="grow task-edit" onClick={() => activeDay && openEdit(activeDay, t)} aria-label={`Editar ${t.title}`}>
                   <span className={t.done ? "task-title done" : "task-title"}>{t.title}</span>
-                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <Stars n={t.stars} />
-                  </span>
-                </span>
+                  <Stars n={t.stars} />
+                </button>
                 <button type="button" className="icon-btn" aria-label={`Borrar ${t.title}`} onClick={() => removeTask(t.id)}>×</button>
               </div>
             ))}
@@ -309,55 +330,6 @@ export default function HoyScreen() {
           <span className="add-plus" aria-hidden="true">+</span>
           Añadir tarea
         </button>
-      </section>
-
-      {/* Emails */}
-      <section className="section" aria-labelledby="h-mail">
-        <div className="section-head">
-          <h2 id="h-mail" className="section-title">Emails · Principal</h2>
-          {mail.status === "ok" && <span className="small muted">{unread > 0 ? `${unread} sin leer` : "Todo leído"}</span>}
-        </div>
-        {mail.status === "sin-configurar" ? (
-          <div className="card">
-            <p className="small muted" style={{ margin: 0, lineHeight: 1.5 }}>
-              Añade EMAIL_USER y EMAIL_APP_PASSWORD en Vercel y vuelve a desplegar para ver tu correo.
-            </p>
-          </div>
-        ) : mail.status === "error" ? (
-          <div className="card"><p className="error" role="alert" style={{ margin: 0 }}>{mail.error}</p></div>
-        ) : mail.status === "cargando" ? (
-          <div className="skeleton" style={{ height: 220 }} />
-        ) : (
-          mail.mails.length === 0 ? (
-            <div className="card"><span className="small muted">Ningún email en Principal ni hoy ni ayer.</span></div>
-          ) : (
-            (["hoy", "ayer"] as const).map((day) => {
-              const list = mail.mails.filter((m) => m.day === day);
-              if (list.length === 0) return null;
-              return (
-                <div key={day} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <span className="label-caps" style={{ paddingLeft: 4 }}>{day === "hoy" ? "Hoy" : "Ayer"}</span>
-                  <div className="list">
-                    {list.map((m) => (
-                      <div className="row mail" key={m.id}>
-                        <span className="avatar" aria-hidden="true">{m.initials}</span>
-                        <div className="grow" style={{ gap: 2 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                            <span className="ellipsis" style={{ fontSize: 15, fontWeight: m.unread ? 700 : 500 }}>{m.from}</span>
-                            <span className="tiny muted" style={{ flexShrink: 0 }}>{m.time}</span>
-                          </div>
-                          <span className="ellipsis" style={{ fontSize: 14, fontWeight: m.unread ? 600 : 400 }}>{m.subject}</span>
-                          {m.preview && <span className="ellipsis small muted">{m.preview}</span>}
-                          {m.unread && <span className="chip" style={{ marginTop: 4 }}>No leído</span>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })
-          )
-        )}
       </section>
 
       {/* Calendario completo */}
@@ -415,7 +387,7 @@ export default function HoyScreen() {
         <div className="sheet-backdrop" onClick={() => setSheet(false)}>
           <form className="sheet" onSubmit={addTask} onClick={(e) => e.stopPropagation()} aria-labelledby="h-nueva">
             <div className="sheet-grip" aria-hidden="true" />
-            <h2 id="h-nueva" style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Nueva tarea</h2>
+            <h2 id="h-nueva" style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>{form.editId ? "Editar tarea" : "Nueva tarea"}</h2>
             {form.date && (
               <span className="small muted" style={{ marginTop: -8 }}>
                 {form.date === today ? "Hoy" : dateFromKey(form.date).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}
@@ -451,7 +423,11 @@ export default function HoyScreen() {
               </div>
             </fieldset>
             <div style={{ display: "flex", gap: 10 }}>
-              <button type="button" className="btn-secondary" onClick={() => setSheet(false)}>Cancelar</button>
+              {form.editId ? (
+                <button type="button" className="btn-secondary danger" onClick={deleteEditing}>Borrar</button>
+              ) : (
+                <button type="button" className="btn-secondary" onClick={() => setSheet(false)}>Cancelar</button>
+              )}
               <button type="submit" className="btn-primary" disabled={!form.title.trim()}>Guardar</button>
             </div>
           </form>

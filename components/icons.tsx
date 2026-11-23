@@ -104,3 +104,11 @@ export const SparkIcon = (p: P) => (
     <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.5 2.5M15.2 15.2l2.5 2.5M6.3 17.7l2.5-2.5M15.2 8.8l2.5-2.5" />
   </Base>
 );
+
+/** Alimentación: plato con cubiertos. */
+export const FoodIcon = (p: P) => (
+  <Base {...p}>
+    <circle cx="12" cy="12" r="5.5" />
+    <path d="M3 4v6a2 2 0 0 0 2 2v8M5 4v4M21 4c-1.7 0-2.5 1.5-2.5 4s.8 3.5 2.5 3.5V20" />
+  </Base>
+);

@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarIcon, DumbbellIcon } from "./icons";
+import { CalendarIcon, DumbbellIcon, FoodIcon } from "./icons";
 
 const tabs = [
   { href: "/", label: "Hoy", Icon: CalendarIcon },
   { href: "/entreno", label: "Entreno", Icon: DumbbellIcon },
+  { href: "/comida", label: "Alimentación", Icon: FoodIcon },
 ];
 
 export default function TabBar() {
