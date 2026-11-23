@@ -12,6 +12,7 @@ import { useSettings } from "@/lib/useSettings";
 import { useWorkoutDays } from "@/lib/useWorkoutDays";
 import { dayStreak } from "@/lib/streaks";
 import StreakPill from "./StreakPill";
+import WeeklySummary from "./WeeklySummary";
 
 
 export default function HoyScreen() {
@@ -450,6 +451,8 @@ export default function HoyScreen() {
           Añadir tarea
         </button>
       </section>
+
+      {today && <WeeklySummary today={today} settings={settings} getTasks={getTasks} doneWorkouts={doneWorkouts} />}
 
       {/* Calendario completo */}
       {fullCal && today && activeDay && (
