@@ -8,6 +8,7 @@ import {
   dateFromKey,
   dateKey,
   DOW,
+  endOf,
   mondayOf,
   toMinutes,
   TZ,
@@ -179,7 +180,10 @@ export default function CalendarFull({ today, selected, onSelect, onClose, getTa
                     </button>
                   ) : (
                     <div className="row" key={item.task.id}>
-                      <div className="time-col"><span style={{ fontSize: 15, fontWeight: 600 }}>{item.time || "—"}</span></div>
+                      <div className="time-col">
+                        <span style={{ fontSize: 15, fontWeight: 600 }}>{item.time || "Todo"}</span>
+                        <span className="tiny muted">{item.time ? endOf(item.task) : "el día"}</span>
+                      </div>
                       <div className="source-bar" style={{ background: "var(--accent)", opacity: item.task.done ? 0.35 : 1 }} />
                       <div className="grow">
                         <span className={item.task.done ? "task-title done" : "task-title"} style={{ fontSize: 16 }}>{item.task.title}</span>
@@ -326,7 +330,7 @@ function DayColumn({
     ...(workout ? [{ id: "w", start: toMinutes(workoutTime), end: toMinutes(workoutTime) + 60, title: (done ? "✓ " : "") + shortWorkout(workout.title), kind: "workout" as const }] : []),
     ...tasks
       .filter((t) => t.time)
-      .map((t) => ({ id: t.id, start: toMinutes(t.time), end: toMinutes(t.time) + 45, title: t.title, kind: "task" as const, done: t.done })),
+      .map((t) => ({ id: t.id, start: toMinutes(t.time), end: toMinutes(endOf(t)), title: t.title, kind: "task" as const, done: t.done })),
   ]);
   const top = (min: number) => ((min - FIRST_HOUR * 60) / 60) * HOUR_PX;
 

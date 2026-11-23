@@ -6,7 +6,8 @@ import { CalendarIcon, CheckIcon, SunIcon } from "./icons";
 import Stars from "./Stars";
 import CalendarFull from "./CalendarFull";
 import { useStored } from "@/lib/useStored";
-import { addDays, agendaFor, dateFromKey, dateKey, DOW, repeatLabel, sortTasks, tasksOn, TZ, workoutFor, type RecurringTask, type Repeat, type Task } from "@/lib/agenda";
+import { toMinutes as toMin } from "@/lib/agenda";
+import { addDays, agendaFor, dateFromKey, dateKey, DOW, durationLabel, endOf, plusMinutes, repeatLabel, sortTasks, tasksOn, TZ, workoutFor, type RecurringTask, type Repeat, type Task } from "@/lib/agenda";
 import { useSettings } from "@/lib/useSettings";
 import { useWorkoutDays } from "@/lib/useWorkoutDays";
 
@@ -63,9 +64,14 @@ export default function HoyScreen() {
 
   const [sheet, setSheet] = useState(false);
   type RepeatChoice = "none" | "daily" | "weekdays" | "weekly" | "monthly";
-  const [form, setForm] = useState({ title: "", time: "", stars: 3, date: "", editId: "", repeat: "none" as RepeatChoice, days: [] as number[] });
+  const [form, setForm] = useState({ title: "", time: "", end: "", stars: 3, date: "", editId: "", repeat: "none" as RepeatChoice, days: [] as number[] });
   function openAdd(date: string, time = "") {
-    setForm({ title: "", time, stars: 3, date, editId: "", repeat: "none", days: [dateFromKey(date).getDay()] });
+    // Como en el iPhone: por defecto empieza a la próxima hora en punto y dura 1 hora.
+    if (!time) {
+      const h = Number(new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", hour12: false }).format(new Date())) % 24;
+      time = date === today ? `${String(Math.min(23, h + 1)).padStart(2, "0")}:00` : "09:00";
+    }
+    setForm({ title: "", time, end: time ? plusMinutes(time, 60) : "", stars: 3, date, editId: "", repeat: "none", days: [dateFromKey(date).getDay()] });
     setSheet(true);
   }
   function openEdit(date: string, t: Task) {
@@ -73,6 +79,7 @@ export default function HoyScreen() {
     setForm({
       title: t.title,
       time: t.time,
+      end: t.time ? endOf(t) : "",
       stars: t.stars,
       date,
       editId: t.id,
@@ -99,23 +106,23 @@ export default function HoyScreen() {
     const editingRec = form.editId.startsWith("r:") ? form.editId.slice(2) : null;
     if (editingRec) {
       if (repeat) {
-        setRecurring((rs) => rs.map((r) => (r.id === editingRec ? { ...r, title, time: form.time, stars: form.stars, repeat } : r)));
+        setRecurring((rs) => rs.map((r) => (r.id === editingRec ? { ...r, title, time: form.time, end: form.time ? form.end : undefined, stars: form.stars, repeat } : r)));
       } else {
         // Deja de repetirse: se queda como tarea suelta de ese día.
         setRecurring((rs) => rs.filter((r) => r.id !== editingRec));
-        setTasksOf(day, (ts) => [...ts, { id: crypto.randomUUID(), title, time: form.time, stars: form.stars, done: false }]);
+        setTasksOf(day, (ts) => [...ts, { id: crypto.randomUUID(), title, time: form.time, end: form.time ? form.end : undefined, stars: form.stars, done: false }]);
       }
     } else if (form.editId) {
       if (repeat) {
         setTasksOf(day, (ts) => ts.filter((t) => t.id !== form.editId));
-        setRecurring((rs) => [...rs, { id: crypto.randomUUID(), title, time: form.time, stars: form.stars, repeat, from: day, skips: [] }]);
+        setRecurring((rs) => [...rs, { id: crypto.randomUUID(), title, time: form.time, end: form.time ? form.end : undefined, stars: form.stars, repeat, from: day, skips: [] }]);
       } else {
-        setTasksOf(day, (ts) => ts.map((t) => (t.id === form.editId ? { ...t, title, time: form.time, stars: form.stars } : t)));
+        setTasksOf(day, (ts) => ts.map((t) => (t.id === form.editId ? { ...t, title, time: form.time, end: form.time ? form.end : undefined, stars: form.stars } : t)));
       }
     } else if (repeat) {
-      setRecurring((rs) => [...rs, { id: crypto.randomUUID(), title, time: form.time, stars: form.stars, repeat, from: day, skips: [] }]);
+      setRecurring((rs) => [...rs, { id: crypto.randomUUID(), title, time: form.time, end: form.time ? form.end : undefined, stars: form.stars, repeat, from: day, skips: [] }]);
     } else {
-      setTasksOf(day, (ts) => [...ts, { id: crypto.randomUUID(), title, time: form.time, stars: form.stars, done: false }]);
+      setTasksOf(day, (ts) => [...ts, { id: crypto.randomUUID(), title, time: form.time, end: form.time ? form.end : undefined, stars: form.stars, done: false }]);
     }
     setSheet(false);
   }
@@ -363,7 +370,8 @@ export default function HoyScreen() {
                   aria-label={`Editar ${item.task.title}`}
                 >
                   <div className="time-col">
-                    <span style={{ fontSize: 15, fontWeight: 600 }}>{item.time || "—"}</span>
+                    <span style={{ fontSize: 15, fontWeight: 600 }}>{item.time || "Todo"}</span>
+                    <span className="tiny muted">{item.time ? endOf(item.task) : "el día"}</span>
                   </div>
                   <div className="source-bar" style={{ background: "var(--accent)", opacity: item.task.done ? 0.35 : 1 }} />
                   <div className="grow">
@@ -401,7 +409,10 @@ export default function HoyScreen() {
                   />
                   <span className="check" aria-hidden="true">{t.done && <CheckIcon size={14} />}</span>
                 </label>
-                <span className="task-time">{t.time || "—"}</span>
+                <span className="task-time">
+                  {t.time || "—"}
+                  {t.time && <span className="tiny muted" style={{ display: "block", fontWeight: 500 }}>{endOf(t)}</span>}
+                </span>
                 <button type="button" className="grow task-edit" onClick={() => activeDay && openEdit(activeDay, t)} aria-label={`Editar ${t.title}`}>
                   <span className={t.done ? "task-title done" : "task-title"}>{t.title}</span>
                   <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -493,9 +504,50 @@ export default function HoyScreen() {
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
               />
             </label>
-            <label className="field">Hora (opcional)
-              <input className="input" type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
-            </label>
+            <div className="time-block">
+              <label className="toggle-row" style={{ minHeight: 40 }}>
+                <input
+                  type="checkbox"
+                  checked={!form.time}
+                  onChange={(e) => {
+                    const now = new Date();
+                    const start = `${String(Math.min(23, now.getHours() + 1)).padStart(2, "0")}:00`;
+                    setForm(e.target.checked ? { ...form, time: "", end: "" } : { ...form, time: start, end: plusMinutes(start, 60) });
+                  }}
+                />
+                Todo el día (sin hora)
+              </label>
+              {form.time && (
+                <div className="time-pair">
+                  <label className="field">Empieza
+                    <input
+                      className="input"
+                      type="time"
+                      value={form.time}
+                      onChange={(e) => {
+                        const t = e.target.value;
+                        if (!t) return;
+                        // Como en el iPhone: al mover el inicio, el fin se mueve con él.
+                        const dur = form.end && form.end > form.time ? toMin(form.end) - toMin(form.time) : 60;
+                        setForm({ ...form, time: t, end: plusMinutes(t, dur) });
+                      }}
+                    />
+                  </label>
+                  <label className="field">Termina
+                    <input
+                      className="input"
+                      type="time"
+                      value={form.end}
+                      onChange={(e) => {
+                        const t = e.target.value;
+                        if (t) setForm({ ...form, end: t > form.time ? t : plusMinutes(form.time, 15) });
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+              {form.time && form.end && <span className="tiny muted">Dura {durationLabel(form.time, form.end)}</span>}
+            </div>
             <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
               <legend style={{ marginBottom: 6 }}>Importancia</legend>
               <div className="star-picker">

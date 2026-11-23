@@ -127,12 +127,6 @@ export const ScaleIcon = (p: P) => (
   </Base>
 );
 
-export const BarcodeIcon = (p: P) => (
-  <Base {...p}>
-    <path d="M4 6v12M7 6v12M10 6v12M14 6v12M17 6v12M20 6v12" />
-  </Base>
-);
-
 export const FlameIcon = (p: P) => (
   <Base {...p}>
     <path d="M12 3c1 3 4 4.5 4 9a4 4 0 0 1-8 0c0-2 1-3 1-3 .5 1.5 1.5 2 2 2 0-3-1-5 1-8z" />

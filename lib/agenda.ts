@@ -4,7 +4,8 @@ import { PLAN_INFO, planForWeekday, type Settings } from "./settings";
 export type Task = {
   id: string; // las que se repiten empiezan por "r:"
   title: string;
-  time: string; // "HH:MM" o ""
+  time: string; // inicio "HH:MM" o "" (todo el día)
+  end?: string; // fin "HH:MM"
   stars: number; // 1-5
   done: boolean;
   repeat?: string; // texto ("Cada día") si es una tarea que se repite
@@ -12,7 +13,7 @@ export type Task = {
 
 /** Tarea que se repite. */
 export type Repeat = { kind: "daily" } | { kind: "weekdays" } | { kind: "weekly"; days: number[] } | { kind: "monthly"; day: number };
-export type RecurringTask = { id: string; title: string; time: string; stars: number; repeat: Repeat; from: string; skips: string[] };
+export type RecurringTask = { id: string; title: string; time: string; end?: string; stars: number; repeat: Repeat; from: string; skips: string[] };
 
 const DAY_SHORT = ["D", "L", "M", "X", "J", "V", "S"];
 export function repeatLabel(r: Repeat) {
@@ -50,7 +51,7 @@ export function tasksOn(key: string, single: Record<string, Task[]>, recurring: 
     ...(single[key] ?? []),
     ...recurring
       .filter((r) => occursOn(r, key))
-      .map((r) => ({ id: `r:${r.id}`, title: r.title, time: r.time, stars: r.stars, done: done.has(r.id), repeat: repeatLabel(r.repeat) })),
+      .map((r) => ({ id: `r:${r.id}`, title: r.title, time: r.time, end: r.end, stars: r.stars, done: done.has(r.id), repeat: repeatLabel(r.repeat) })),
   ];
 }
 
@@ -102,3 +103,21 @@ export const toMinutes = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
   return h * 60 + (m || 0);
 };
+
+/** "HH:MM" sumando minutos (sin pasar de las 23:59). */
+export function plusMinutes(hhmm: string, add: number) {
+  const m = Math.min(23 * 60 + 59, toMinutes(hhmm) + add);
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+/** Fin de una tarea: el que tenga o, si no, 30 minutos después del inicio. */
+export const endOf = (t: { time: string; end?: string }) => (t.end && t.end > t.time ? t.end : plusMinutes(t.time, 30));
+
+/** "1 h 30 min" */
+export function durationLabel(start: string, end: string) {
+  const d = toMinutes(end) - toMinutes(start);
+  if (d <= 0) return "";
+  const h = Math.floor(d / 60);
+  const m = d % 60;
+  return [h ? `${h} h` : "", m ? `${m} min` : ""].filter(Boolean).join(" ");
+}
